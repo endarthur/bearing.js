@@ -54,4 +54,33 @@ describe('mat3', () => {
     const result = mat3.transformVec3(combined, [1, 0, 0]);
     approxArr(result, [0, 1, 0]);
   });
+
+  it('orthonormalize fixes drifted matrix', () => {
+    // Start with a clean rotation, add drift
+    const m = mat3.rotationFromAxisAngle([1, 1, 1].map(v => v / Math.sqrt(3)), 1.2);
+    const drifted = m.map(v => v + (Math.random() - 0.5) * 0.001);
+    const fixed = mat3.orthonormalize(drifted);
+    // R^T * R should be identity
+    const prod = mat3.multiply(mat3.transpose(fixed), fixed);
+    approxArr(prod, mat3.identity());
+  });
+
+  it('orthonormalize preserves clean rotation', () => {
+    const m = mat3.rotationFromAxisAngle([0, 1, 0], 0.8);
+    const fixed = mat3.orthonormalize(m);
+    approxArr(fixed, m);
+  });
+
+  it('orthonormalize survives heavy accumulation', () => {
+    // Simulate 1000 small rotation multiplies
+    let R = mat3.identity();
+    const small = mat3.rotationFromAxisAngle([0.6, 0.8, 0], 0.003);
+    for (let i = 0; i < 1000; i++) {
+      R = mat3.multiply(small, R);
+    }
+    // Without orthonormalize, drift accumulates
+    const fixed = mat3.orthonormalize(R);
+    const prod = mat3.multiply(mat3.transpose(fixed), fixed);
+    approxArr(prod, mat3.identity());
+  });
 });

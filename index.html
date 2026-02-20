@@ -179,7 +179,7 @@ body {
 
 /* === STEREONET WINDOW === */
 #win-sn > .win-body { display: flex; flex-direction: column; }
-#sn-mount { text-align: center; cursor: grab; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#sn-mount { text-align: center; cursor: grab; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; touch-action: none; }
 #sn-mount:active { cursor: grabbing; }
 #sn-mount svg { display: block; width: 100%; height: auto; }
 #sn-mount svg text { fill: #c0d0d0 !important; }
@@ -1002,6 +1002,20 @@ body {
           <button class="sw-opt" data-val="polar">POL</button>
         </div>
       </div>
+      <div class="hw-sw">
+        <span class="sw-label">Grab</span>
+        <div class="sw-group" id="sw-grab">
+          <button class="sw-opt active" data-val="off">OFF</button>
+          <button class="sw-opt" data-val="on">ON</button>
+        </div>
+      </div>
+      <div class="hw-sw">
+        <span class="sw-label">Inv Y</span>
+        <div class="sw-group" id="sw-invy">
+          <button class="sw-opt active" data-val="off">OFF</button>
+          <button class="sw-opt" data-val="on">ON</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1210,6 +1224,8 @@ G = 1      R = 1</div>
 <strong>save</strong> &lt;name&gt; &mdash; save current project
 <strong>load</strong> [name|#] &mdash; load a saved project
 <strong>projects</strong>  &mdash; list saved projects
+<strong>spin</strong> &lt;a&gt; &lt;p&gt; &lt;s&gt; [tps] &mdash; animate rotation
+<strong>spin off</strong>  &mdash; stop animation
 <strong>cls</strong>       &mdash; clear console output
 <strong>about</strong>     &mdash; about this software</div>
             <p style="margin-top:10px"><strong>Extended data format:</strong></p>
@@ -1706,6 +1722,7 @@ var bearing = (() => {
   __export(mat3_exports, {
     identity: () => identity,
     multiply: () => multiply,
+    orthonormalize: () => orthonormalize,
     rotationFromAxisAngle: () => rotationFromAxisAngle,
     transformVec3: () => transformVec3,
     transpose: () => transpose
@@ -1761,6 +1778,33 @@ var bearing = (() => {
       m[2],
       m[5],
       m[8]
+    ];
+  }
+  function orthonormalize(m) {
+    let r0 = [m[0], m[1], m[2]];
+    let r1 = [m[3], m[4], m[5]];
+    let r2;
+    let len = Math.sqrt(r0[0] * r0[0] + r0[1] * r0[1] + r0[2] * r0[2]);
+    r0 = [r0[0] / len, r0[1] / len, r0[2] / len];
+    let d = r1[0] * r0[0] + r1[1] * r0[1] + r1[2] * r0[2];
+    r1 = [r1[0] - d * r0[0], r1[1] - d * r0[1], r1[2] - d * r0[2]];
+    len = Math.sqrt(r1[0] * r1[0] + r1[1] * r1[1] + r1[2] * r1[2]);
+    r1 = [r1[0] / len, r1[1] / len, r1[2] / len];
+    r2 = [
+      r0[1] * r1[2] - r0[2] * r1[1],
+      r0[2] * r1[0] - r0[0] * r1[2],
+      r0[0] * r1[1] - r0[1] * r1[0]
+    ];
+    return [
+      r0[0],
+      r0[1],
+      r0[2],
+      r1[0],
+      r1[1],
+      r1[2],
+      r2[0],
+      r2[1],
+      r2[2]
     ];
   }
 
@@ -3148,8 +3192,14 @@ var bearing = (() => {
   var LAYOUT_KEY = 'bearing-os2-layout';
   var PROJECTS_KEY = 'bearing-os2-projects';
   var CURRENT_KEY = 'bearing-os2-current';
+  var GRAB_KEY = 'bearing-os2-grab';
   var PALETTE = ['#4ac8ff', '#ffaa44', '#ff5577', '#44dd88', '#cc77ff', '#ffcc33', '#ff8844', '#88cccc'];
   var activeColor = 0;
+  var usePointerLock = false;
+  var invertY = false;
+  var INVY_KEY = 'bearing-os2-invy';
+  var spinTimer = null;
+  var spinState = null;
 
   // =========================================================================
   //  SAMPLE DATA
@@ -3326,26 +3376,52 @@ var bearing = (() => {
     var dragging = false, lastX, lastY, moved;
 
     el.addEventListener('mousedown', function(e) {
-      if (e.button !== 0) return;
-      dragging = true; moved = false;
-      lastX = e.clientX; lastY = e.clientY;
+      if (e.button !== 0 || e.ctrlKey) return;
+      if (spinTimer) stopSpin();
+      if (usePointerLock) {
+        el.requestPointerLock();
+      } else {
+        dragging = true; moved = false;
+        lastX = e.clientX; lastY = e.clientY;
+      }
       e.preventDefault();
     });
-    window.addEventListener('mousemove', function(e) {
+    document.addEventListener('pointerlockchange', function() {
+      if (document.pointerLockElement === el) {
+        dragging = true; moved = false;
+      } else {
+        dragging = false;
+      }
+    });
+    document.addEventListener('mousemove', function(e) {
       if (!dragging) return;
-      var dx = e.clientX - lastX, dy = e.clientY - lastY;
+      var dx, dy;
+      if (usePointerLock) {
+        dx = e.movementX; dy = e.movementY;
+      } else {
+        dx = e.clientX - lastX; dy = e.clientY - lastY;
+        lastX = e.clientX; lastY = e.clientY;
+      }
+      if (invertY) dy = -dy;
+      // Clamp to prevent browser movementX/Y spikes
+      var clamp = 80;
+      dx = Math.max(-clamp, Math.min(clamp, dx));
+      dy = Math.max(-clamp, Math.min(clamp, dy));
       if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      lastX = e.clientX; lastY = e.clientY;
       var s = 0.005;
       var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
       var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
       var delta = mat3.multiply(Rx, Ry);
-      sn.setRotation(sn.rotation ? mat3.multiply(delta, sn.rotation) : delta);
+      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+      sn.setRotation(mat3.orthonormalize(R));
       if (showContours && currentDcos.length >= 3) sn.updateContours();
       sn.render();
       updateViewDisplay();
     });
-    window.addEventListener('mouseup', function() { dragging = false; });
+    document.addEventListener('mouseup', function() {
+      if (dragging && usePointerLock) document.exitPointerLock();
+      dragging = false;
+    });
     el._dragMoved = function() { return moved; };
   }
 
@@ -3670,9 +3746,49 @@ var bearing = (() => {
     setTimeout(function() { setLED('exp', 'off'); }, 2000);
   }
   function resetView() {
+    stopSpin();
     sn.setRotation(null);
     if (showContours && currentDcos.length >= 3) sn.updateContours();
     sn.render(); updateViewDisplay();
+  }
+
+  function parseSpinVal(s) {
+    var m = s.match(/^([+-]?\d+(?:\.\d+)?)([+-]\d+(?:\.\d+)?)?$/);
+    if (!m) return null;
+    return { val: parseFloat(m[1]), delta: m[2] ? parseFloat(m[2]) : 0 };
+  }
+
+  function stopSpin() {
+    if (spinTimer) { clearInterval(spinTimer); spinTimer = null; }
+    spinState = null;
+  }
+
+  function startSpin(args) {
+    var a = parseSpinVal(args[0]), p = parseSpinVal(args[1]), g = parseSpinVal(args[2]);
+    if (!a || !p || !g) return 'Cannot parse spin values.\nFormat: N or N+D or N-D (e.g. 120+1, 30, 0-0.5)';
+    var tps = args[3] ? parseFloat(args[3]) : 30;
+    if (isNaN(tps) || tps <= 0) tps = 30;
+    stopSpin();
+    spinState = {
+      azim: a.val, dAzim: a.delta,
+      plunge: p.val, dPlunge: p.delta,
+      angle: g.val, dAngle: g.delta
+    };
+    var interval = Math.round(1000 / tps);
+    spinTimer = setInterval(function() {
+      var st = spinState;
+      sn.setRotation(Stereonet.rotationFromNorthPole(st.azim, st.plunge, st.angle));
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render(); updateViewDisplay();
+      st.azim += st.dAzim;
+      st.plunge += st.dPlunge;
+      st.angle += st.dAngle;
+    }, interval);
+    var desc = '';
+    if (a.delta) desc += 'azim ' + (a.delta > 0 ? '+' : '') + a.delta + '/tick ';
+    if (p.delta) desc += 'plunge ' + (p.delta > 0 ? '+' : '') + p.delta + '/tick ';
+    if (g.delta) desc += 'spin ' + (g.delta > 0 ? '+' : '') + g.delta + '/tick ';
+    return 'Spinning at ' + tps + ' tps.' + (desc ? '\n  ' + desc.trim() : '');
   }
 
   // =========================================================================
@@ -4107,7 +4223,7 @@ var bearing = (() => {
   function execCmd(input) {
     var p = input.split(/\s+/), cmd = p[0].toLowerCase(), args = p.slice(1);
     switch (cmd) {
-      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  new, save <name>, load [name|#], projects,\n  cls, about';
+      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  spin <azim> <plunge> <angle> [tps] | off,\n  new, save <name>, load [name|#], projects,\n  cls, about';
       case 'plot': plotData(); return '';
       case 'clear': clearData(); return 'Data cleared.';
       case 'stats': return getStatsText();
@@ -4161,6 +4277,13 @@ var bearing = (() => {
         if (args.length === 0) return 'Usage: rem <comment>';
         appendData('# ' + args.join(' '));
         return '';
+      case 'spin':
+        if (args.length === 0 || args[0].toLowerCase() === 'off') {
+          stopSpin();
+          return 'Spin stopped.';
+        }
+        if (args.length < 3) return 'Usage: spin <azim> <plunge> <angle> [tps]\n  Each value can have +/-N for per-tick delta.\n  E.g.: spin 0+1 0 0  or  spin 120 30+0.5 0-2 60\n  spin off to stop.';
+        return startSpin(args);
       default: return 'Unknown: ' + cmd;
     }
   }
@@ -4194,6 +4317,36 @@ var bearing = (() => {
         btn.classList.add('active');
         sn.net = btn.dataset.val;
         sn.render(); conLog('Net: ' + btn.dataset.val);
+      });
+    });
+    // Grab (pointer lock) toggle
+    try { usePointerLock = localStorage.getItem(GRAB_KEY) === 'on'; } catch(e) {}
+    if (usePointerLock) {
+      document.querySelector('#sw-grab .sw-opt[data-val="off"]').classList.remove('active');
+      document.querySelector('#sw-grab .sw-opt[data-val="on"]').classList.add('active');
+    }
+    document.querySelectorAll('#sw-grab .sw-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#sw-grab .sw-opt').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        usePointerLock = btn.dataset.val === 'on';
+        try { localStorage.setItem(GRAB_KEY, btn.dataset.val); } catch(e) {}
+        conLog('Pointer grab: ' + btn.dataset.val);
+      });
+    });
+    // Invert Y toggle
+    try { invertY = localStorage.getItem(INVY_KEY) === 'on'; } catch(e) {}
+    if (invertY) {
+      document.querySelector('#sw-invy .sw-opt[data-val="off"]').classList.remove('active');
+      document.querySelector('#sw-invy .sw-opt[data-val="on"]').classList.add('active');
+    }
+    document.querySelectorAll('#sw-invy .sw-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#sw-invy .sw-opt').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        invertY = btn.dataset.val === 'on';
+        try { localStorage.setItem(INVY_KEY, btn.dataset.val); } catch(e) {}
+        conLog('Invert Y: ' + btn.dataset.val);
       });
     });
   }
@@ -4334,11 +4487,13 @@ var bearing = (() => {
         case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
           e.preventDefault();
           var dx = (e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0) * NUDGE;
-          var dy = (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0) * NUDGE;
+          var iy = invertY ? 1 : -1;
+          var dy = (e.key === 'ArrowUp' ? iy : e.key === 'ArrowDown' ? -iy : 0) * NUDGE;
           var Ry = dx ? mat3.rotationFromAxisAngle([0, 1, 0], dx) : null;
           var Rx = dy ? mat3.rotationFromAxisAngle([1, 0, 0], dy) : null;
           var delta = Ry && Rx ? mat3.multiply(Rx, Ry) : (Ry || Rx);
-          sn.setRotation(sn.rotation ? mat3.multiply(delta, sn.rotation) : delta);
+          var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+          sn.setRotation(mat3.orthonormalize(R));
           if (showContours && currentDcos.length >= 3) sn.updateContours();
           sn.render(); updateViewDisplay();
           break;

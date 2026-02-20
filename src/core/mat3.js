@@ -51,3 +51,37 @@ export function transpose(m) {
     m[2], m[5], m[8],
   ];
 }
+
+/**
+ * Re-orthonormalize a 3x3 rotation matrix via Gram-Schmidt on rows.
+ * Corrects accumulated floating-point drift.
+ */
+export function orthonormalize(m) {
+  // Row vectors
+  let r0 = [m[0], m[1], m[2]];
+  let r1 = [m[3], m[4], m[5]];
+  let r2;
+
+  // Normalize r0
+  let len = Math.sqrt(r0[0] * r0[0] + r0[1] * r0[1] + r0[2] * r0[2]);
+  r0 = [r0[0] / len, r0[1] / len, r0[2] / len];
+
+  // r1 = r1 - (r1·r0) * r0, then normalize
+  let d = r1[0] * r0[0] + r1[1] * r0[1] + r1[2] * r0[2];
+  r1 = [r1[0] - d * r0[0], r1[1] - d * r0[1], r1[2] - d * r0[2]];
+  len = Math.sqrt(r1[0] * r1[0] + r1[1] * r1[1] + r1[2] * r1[2]);
+  r1 = [r1[0] / len, r1[1] / len, r1[2] / len];
+
+  // r2 = r0 × r1 (guaranteed orthonormal)
+  r2 = [
+    r0[1] * r1[2] - r0[2] * r1[1],
+    r0[2] * r1[0] - r0[0] * r1[2],
+    r0[0] * r1[1] - r0[1] * r1[0],
+  ];
+
+  return [
+    r0[0], r0[1], r0[2],
+    r1[0], r1[1], r1[2],
+    r2[0], r2[1], r2[2],
+  ];
+}
