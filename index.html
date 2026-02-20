@@ -270,8 +270,36 @@ body {
 #data-count { font-size: 10px; color: #3a5a5a; margin-left: auto; }
 
 /* === STATS WINDOW (instrument-style) === */
-#stats-body { font-size: 10px; line-height: 1.4; }
+#win-stats > .win-body { display: flex; flex-direction: column; }
+#stats-body { font-size: 10px; line-height: 1.4; flex-shrink: 0; overflow-y: auto; }
+#stats-body::-webkit-scrollbar { width: 4px; }
+#stats-body::-webkit-scrollbar-track { background: #070e14; }
+#stats-body::-webkit-scrollbar-thumb { background: #1a2a2a; border-radius: 2px; }
 .stats-empty { color: #2a4a4a; font-style: italic; padding: 12px 0; text-align: center; }
+
+/* Group selector */
+#stats-group-sel { padding: 2px 4px 4px; border-bottom: 1px solid #0c1820; display: none; }
+#stats-group-dd {
+  width: 100%; font-family: 'Courier New', monospace; font-size: 10px;
+  background: #0a1218; color: #8ac8c8; border: 1px solid #1a2e3e;
+  padding: 2px 4px; outline: none; cursor: pointer;
+}
+#stats-group-dd:hover { border-color: #2a5a5a; }
+#stats-group-dd option { background: #0a1218; color: #8ac8c8; }
+
+/* Plot area */
+#stats-plot-area { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid #0c1820; margin-top: 4px; padding-top: 4px; }
+#stats-plot-tabs { display: flex; gap: 2px; flex-shrink: 0; margin-bottom: 4px; }
+.spt-tab {
+  font-family: 'Courier New', monospace; font-size: 9px;
+  background: #0a1218; color: #3a6060; border: 1px solid #152020;
+  padding: 2px 8px; cursor: pointer; letter-spacing: 0.5px;
+}
+.spt-tab.active { background: #0f1a22; color: #8ac8c8; border-color: #1a3636; }
+.spt-tab.toggled { background: #0a1a12; color: #4ac8a0; border-color: #1a3a2a; }
+.spt-tab:hover:not(.active):not(.toggled) { color: #5a8a8a; }
+#stats-plot-mount { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#stats-plot-mount svg { max-width: 100%; max-height: 100%; }
 
 /* Digital readout boxes */
 .st-digi-row { display: flex; gap: 4px; margin: 4px 0 6px; }
@@ -940,7 +968,34 @@ body {
       <!-- Stats -->
       <div class="window" id="win-stats" style="left:592px;top:292px;width:636px;height:474px" data-name="Stats" data-min-w="250" data-min-h="200">
         <div class="win-tb"><span class="win-title">&#9636; Statistics</span><button class="win-btn win-min">&#8722;</button></div>
-        <div class="win-body" id="stats-body"><div class="stats-empty">Load data to view.</div></div>
+        <div class="win-body" id="stats-outer">
+          <div id="stats-group-sel"><select id="stats-group-dd"><option value="-1">All groups</option></select></div>
+          <div id="stats-body"><div class="stats-empty">Load data to view.</div></div>
+          <div id="stats-plot-area">
+            <div id="stats-plot-tabs">
+              <button class="spt-tab active" data-plot="woodcock">Flinn</button>
+              <button class="spt-tab" data-plot="vollmer">Vollmer</button>
+            </div>
+            <div id="stats-plot-mount"></div>
+          </div>
+        </div>
+        <div class="win-resize"></div>
+      </div>
+      <!-- Stereogram -->
+      <div class="window minimized" id="win-stereo" style="left:60px;top:80px;width:640px;height:380px" data-name="Stereogram" data-min-w="300" data-min-h="200">
+        <div class="win-tb"><span class="win-title">&#9673; Stereogram</span><button class="win-btn win-min">&#8722;</button></div>
+        <div class="win-body" id="stereo-outer" style="display:flex;flex-direction:column;background:#000;overflow:hidden">
+          <div id="stereo-controls" style="display:flex;gap:3px;padding:2px 4px;flex-shrink:0;border-bottom:1px solid #1a2e3e;align-items:center">
+            <button class="spt-tab" id="stereo-sphere">Sphere</button>
+            <button class="spt-tab active" id="stereo-bowl">Bowl</button>
+            <button class="spt-tab" id="stereo-gc">GC</button>
+            <span id="stereo-sep-label" style="margin-left:auto;color:#4ac8a0;font-size:10px;cursor:pointer" title="Reset separation">Sep</span>
+            <input type="range" id="stereo-strip" min="20" max="80" style="width:60px;accent-color:#4ac8a0">
+          </div>
+          <div id="stereo-canvas-wrap" style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center">
+            <canvas id="stereo-canvas" style="width:100%;height:100%;image-rendering:pixelated"></canvas>
+          </div>
+        </div>
         <div class="win-resize"></div>
       </div>
       <!-- Console -->
@@ -958,6 +1013,7 @@ body {
         <span class="tb-app active" data-win="win-data">&#9776; Data</span>
         <span class="tb-app active" data-win="win-stats">&#9636; Stats</span>
         <span class="tb-app active" data-win="win-con">&gt;_ Console</span>
+        <span class="tb-app" data-win="win-stereo" id="tb-stereo" style="display:none">&#9673; Stereogram</span>
         <span class="tb-spacer"></span>
         <span class="tb-stat"><span class="tb-lbl">n</span>=<span class="tb-v" id="tb-n">0</span></span>
         <span class="tb-stat"><span class="tb-lbl">&#954;</span>=<span class="tb-v" id="tb-kappa">--</span></span>
@@ -1226,6 +1282,9 @@ G = 1      R = 1</div>
 <strong>projects</strong>  &mdash; list saved projects
 <strong>spin</strong> &lt;a&gt; &lt;p&gt; &lt;s&gt; [tps] &mdash; animate rotation
 <strong>spin off</strong>  &mdash; stop animation
+<strong>groups</strong>    &mdash; list data groups
+<strong>group</strong> &lt;n|name|all&gt; &mdash; select stats group
+<strong>stereogram</strong> [dm] &mdash; 3D stereogram / debug
 <strong>cls</strong>       &mdash; clear console output
 <strong>about</strong>     &mdash; about this software</div>
             <p style="margin-top:10px"><strong>Extended data format:</strong></p>
@@ -1235,7 +1294,13 @@ G = 1      R = 1</div>
 <strong>g</strong>     &mdash; plot great circle
 <strong>#RRGGBB</strong> &mdash; custom color
 
-Mix planes and lines freely, one per line.</div>
+<strong>Data groups:</strong>
+g Bedding #4ac8ff p
+120 45
+g Foliation #ff5577 p off
+045 60
+
+Tokens: name, #color, p/l, off</div>
             <p style="margin-top:10px"><strong>Hotkeys</strong> (when no input focused):</p>
             <div class="z-mono"><strong>1</strong>&ndash;<strong>8</strong>    &mdash; select palette color
 <strong>c</strong>      &mdash; toggle contours
@@ -1315,8 +1380,44 @@ Mix planes and lines freely, one per line.</div>
           <span class="sticker yellow center" style="transform:rotate(-2deg)">KEEP THE LETTERS COMING</span>
         </div>
 
-        <!-- PAGE 10: About / Back Cover -->
+        <!-- PAGE 10: References -->
         <div class="z-page" data-p="9">
+          <div class="z-h2">References</div>
+          <span class="sticker blue right" style="transform:rotate(2deg)">CITE YOUR SOURCES</span>
+          <div class="z-body">
+            <div class="z-mono" style="font-size:9px;line-height:1.6">
+Fisher, R.A. (1953) Dispersion on a sphere.
+  <em>Proc. R. Soc. Lond. A</em>, 217, 295&ndash;305.
+
+Woodcock, N.H. (1977) Specification of fabric
+  shapes using an eigenvalue method.
+  <em>Geol. Soc. Am. Bull.</em>, 88, 1231&ndash;1236.
+
+Tocher, F.E. (1979) The computer contouring
+  of fabric diagrams.
+  <em>Comput. Geosci.</em>, 5, 73&ndash;126.
+  <span class="z-redmark">&larr; SAMPLE DATA</span>
+
+Vollmer, F.W. (1990) An application of
+  eigenvalue methods to structural domain
+  analysis. <em>Geol. Soc. Am. Bull.</em>,
+  102, 786&ndash;791.
+
+Bingham, C. (1974) An antipodally symmetric
+  distribution on the sphere.
+  <em>Ann. Stat.</em>, 2, 1201&ndash;1225.
+
+Kamb, W.B. (1959) Ice petrofabric
+  observations from Blue Glacier, Washington.
+  <em>J. Geophys. Res.</em>, 64, 1891&ndash;1909.</div>
+            <div style="text-align:center;margin-top:12px">
+              <span class="sticker green" style="transform:rotate(-1deg)">WE READ THE PAPERS SO YOU DON'T HAVE TO</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 11: About / Back Cover -->
+        <div class="z-page" data-p="10">
           <div class="z-h2">About / Credits</div>
           <div class="z-body">
             <p><strong>bearing.js</strong> &mdash; Structural geology stereonet library in pure JavaScript.
@@ -1325,6 +1426,7 @@ Mix planes and lines freely, one per line.</div>
             principal axis analysis (orientation tensor, eigendecomposition), Woodcock &amp;
             Vollmer fabric parameters, Bingham distribution, kernel-density contouring,
             attitude I/O (dip-direction, strike, quadrant notation).</p>
+            <p>Sample data: 200 poles from Tocher (1979).</p>
             <p>Made with equal parts science and stubbornness by the
             <strong>Geoscientifical Chaos Union</strong>.</p>
             <div style="text-align:center;margin:16px 0">
@@ -1345,7 +1447,7 @@ Mix planes and lines freely, one per line.</div>
       </div>
       <div class="z-nav">
         <button class="z-nav-btn" id="zine-prev" disabled>&#9664; PREV</button>
-        <span class="z-pagenum" id="zine-pagenum">1 / 10</span>
+        <span class="z-pagenum" id="zine-pagenum">1 / 11</span>
         <button class="z-nav-btn" id="zine-next">NEXT &#9654;</button>
       </div>
     </div>
@@ -1397,6 +1499,12 @@ Mix planes and lines freely, one per line.</div>
         <div class="ref-authors">Woodcock, N.H. (1977)</div>
         <div class="ref-atitle">Specification of Fabric Shapes Using an Eigenvalue Method</div>
         <div class="ref-journal">Geological Society of America Bulletin, 88, 1231&ndash;1236.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Tocher, F.E. (1979)</div>
+        <div class="ref-atitle">The Computer Contouring of Fabric Diagrams</div>
+        <div class="ref-journal">Computers &amp; Geosciences, 5, 73&ndash;126.</div>
+        <div class="ref-doi"><a href="https://doi.org/10.1016/0098-3004(79)90019-0" target="_blank">doi:10.1016/0098-3004(79)90019-0</a></div>
       </div>
       <div class="ref-entry">
         <div class="ref-authors">Vollmer, F.W. (1990)</div>
@@ -3182,7 +3290,7 @@ var bearing = (() => {
   var showContours = false;
   var zineOpen = false;
   var zinePage = 0;
-  var ZINE_PAGES = 10;
+  var ZINE_PAGES = 11;
   var windowZ = 100;
   var BAR_SEGS = 12;
   var currentProject = null;
@@ -3200,19 +3308,72 @@ var bearing = (() => {
   var INVY_KEY = 'bearing-os2-invy';
   var spinTimer = null;
   var spinState = null;
+  var activePlot = 'woodcock';
+  var lastPA = null;
+  var groups = [];
+  var selectedGroupIdx = -1;
+  var adventureMode = false;
+  var stereoSphere = false;
+  var stereoGC = false;
+  var stereoStrip = parseInt(localStorage.getItem('stereoStrip')) || 40;
+  var stereoDebug = false;
 
   // =========================================================================
   //  SAMPLE DATA
   // =========================================================================
   var SAMPLE = [
-    '# Clustered bedding orientations',
+    '# Tocher (1979) - 200 poles to planes',
     '# Dip Direction / Dip',
-    '120 45', '125 42', '118 48', '115 50', '122 43',
-    '128 44', '116 46', '124 41', '119 47', '130 40',
-    '112 52', '126 44', '121 49', '117 51', '123 39',
-    '127 43', '114 53', '129 45', '120 42', '113 47',
-    '131 38', '125 46', '118 50', '122 44', '116 41',
-    '124 48', '128 43', '119 46', '126 42', '121 45',
+    '147.704 64.813', '113.663 50.462', '126.587 44.613', '185.946 72.617',
+    '182.887 72.158', '117.096 53.585', '106.355 50.980', '088.821 79.496',
+    '118.418 65.046', '180.374 75.115', '002.590 61.473', '186.324 76.550',
+    '073.251 65.166', '073.075 55.372', '184.012 72.959', '054.920 86.960',
+    '149.582 65.623', '159.197 71.321', '154.722 64.041', '195.160 88.091',
+    '165.847 71.867', '200.319 89.681', '191.572 88.257', '115.686 53.725',
+    '119.646 53.953', '107.687 47.648', '197.313 81.262', '018.910 81.262',
+    '186.295 77.261', '170.073 63.964', '193.162 85.419', '017.958 86.119',
+    '050.066 79.353', '051.529 55.798', '183.888 89.809', '022.684 88.927',
+    '022.847 67.354', '035.434 72.350', '152.535 50.912', '050.636 69.432',
+    '019.931 81.029', '041.512 71.017', '061.994 67.319', '165.805 59.771',
+    '096.176 57.875', '168.413 63.495', '062.166 34.297', '035.197 78.540',
+    '113.356 27.666', '057.701 75.725', '207.980 86.867', '164.107 63.076',
+    '026.724 86.259', '174.334 62.995', '177.443 84.191', '048.417 62.431',
+    '047.913 65.683', '038.494 73.840', '098.498 54.470', '171.121 66.100',
+    '106.525 51.247', '242.519 71.620', '171.796 57.536', '184.788 81.977',
+    '202.191 86.461', '013.365 87.228', '032.958 74.399', '147.061 65.965',
+    '143.730 53.312', '010.308 70.091', '145.370 57.206', '158.877 69.612',
+    '265.256 35.543', '043.428 84.384', '098.266 51.915', '097.822 43.252',
+    '071.013 79.479', '056.093 51.210', '178.973 82.155', '068.170 58.115',
+    '193.314 58.030', '218.444 42.082', '073.681 49.974', '050.558 62.086',
+    '164.928 44.062', '010.509 89.496', '114.927 52.349', '173.027 75.558',
+    '048.600 75.027', '054.556 83.251', '028.714 83.329', '179.097 77.346',
+    '206.759 81.959', '189.796 85.761', '062.805 84.281', '081.532 54.172',
+    '182.726 73.641', '172.438 70.130', '209.246 82.435', '195.288 85.264',
+    '050.907 73.201', '085.990 57.503', '203.828 79.360', '186.366 79.135',
+    '152.194 60.690', '114.351 32.094', '117.694 39.905', '151.686 38.504',
+    '046.208 75.328', '190.187 33.427', '184.025 74.412', '166.945 82.383',
+    '079.147 87.256', '080.213 59.694', '026.953 85.030', '227.387 71.399',
+    '077.225 56.545', '033.882 74.621', '093.408 43.321', '029.687 70.825',
+    '065.182 76.147', '050.685 63.673', '039.644 70.137', '045.481 62.365',
+    '170.814 81.379', '023.895 63.795', '233.271 77.470', '136.735 38.706',
+    '165.968 64.078', '187.254 59.624', '046.060 69.051', '195.918 89.476',
+    '034.020 77.271', '145.704 53.997', '023.234 86.074', '178.647 74.555',
+    '042.615 77.935', '235.232 37.604', '034.457 56.617', '074.546 48.892',
+    '181.248 89.241', '180.138 76.790', '277.718 62.909', '029.092 86.475',
+    '171.900 71.472', '349.540 86.893', '037.460 82.650', '081.254 87.107',
+    '058.418 68.879', '061.123 60.037', '069.092 41.819', '117.138 54.189',
+    '043.721 66.989', '111.762 58.043', '149.894 57.619', '076.044 54.411',
+    '061.195 85.126', '358.275 81.410', '138.966 8.899', '093.954 49.118',
+    '130.246 34.754', '280.296 54.802', '073.719 53.493', '016.698 87.604',
+    '191.761 81.048', '193.082 72.053', '015.233 85.012', '036.658 70.868',
+    '082.952 52.051', '029.841 49.790', '037.979 81.407', '048.625 60.323',
+    '180.669 55.225', '035.159 30.706', '241.215 43.754', '185.154 70.962',
+    '170.722 72.476', '126.284 61.304', '063.119 80.054', '051.368 63.618',
+    '053.725 72.659', '022.326 86.315', '195.305 86.282', '053.241 36.802',
+    '232.124 41.108', '173.320 74.837', '169.298 63.663', '164.828 61.953',
+    '184.352 56.685', '050.775 64.940', '072.223 50.303', '171.455 65.730',
+    '249.528 40.938', '034.971 72.316', '177.362 78.392', '092.586 13.522',
+    '180.257 21.653', '090.249 43.486', '134.942 49.096', '110.946 51.057',
   ].join('\n');
 
   // =========================================================================
@@ -3422,6 +3583,31 @@ var bearing = (() => {
       if (dragging && usePointerLock) document.exitPointerLock();
       dragging = false;
     });
+    // Touch support
+    el.addEventListener('touchstart', function(e) {
+      if (e.touches.length !== 1) return;
+      if (spinTimer) stopSpin();
+      dragging = true; moved = false;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      e.preventDefault();
+    });
+    el.addEventListener('touchmove', function(e) {
+      if (!dragging || e.touches.length !== 1) return;
+      var dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
+      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      if (invertY) dy = -dy;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      var s = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
+      var delta = mat3.multiply(Rx, Ry);
+      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+      sn.setRotation(mat3.orthonormalize(R));
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render(); updateViewDisplay();
+      e.preventDefault();
+    });
+    el.addEventListener('touchend', function() { dragging = false; });
     el._dragMoved = function() { return moved; };
   }
 
@@ -3555,6 +3741,7 @@ var bearing = (() => {
                 String(Math.round(plunge)).padStart(2, '0');
     }
     $('sn-view-val').textContent = viewStr;
+    renderStereogram();
   }
 
   // =========================================================================
@@ -3566,7 +3753,8 @@ var bearing = (() => {
 
   /**
    * Parse a single data line with optional extended flags.
-   * Format: direction dip [p|l] [g] [#RRGGBB]
+   * Format: [p|l] direction dip [p|l] [g] [#RRGGBB]
+   * p/l prefix is optional (OBJ-style), sets type for this line.
    * Returns null for unparseable/comment/blank lines.
    */
   function parseExtendedLine(raw, defaultType, isStrike) {
@@ -3576,8 +3764,16 @@ var bearing = (() => {
     var tokens = line.split(/[\/,\s\t]+/).filter(Boolean);
     if (tokens.length < 2) return null;
 
-    // Extract flags from end, working backwards
+    // p/l as first token: OBJ-style type prefix
     var type = defaultType;
+    var first = tokens[0].toLowerCase();
+    if (first === 'p' || first === 'l') {
+      type = first === 'p' ? 'planes' : 'lines';
+      tokens = tokens.slice(1);
+      if (tokens.length < 2) return null;
+    }
+
+    // Extract flags from end
     var gc = false;
     var color = null;
     var extra = [];
@@ -3613,6 +3809,57 @@ var bearing = (() => {
     return { type: type, dcos: dcos, pair: pair, gc: gc, color: color };
   }
 
+  function parseGroupedData(text, defaultType, isStrike) {
+    var lines = text.split(/\r?\n/);
+    var result = [];
+    var cur = { name: '', color: null, defaultType: defaultType, enabled: true, dcos: [], pairs: [], entries: [] };
+    var autoNum = 0;
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.startsWith('#')) continue;
+
+      var tokens = line.split(/\s+/);
+      if (tokens[0].toLowerCase() === 'g') {
+        // Finalize previous group if it has data, or if it's not the implicit default
+        if (cur.dcos.length > 0 || result.length > 0) {
+          if (cur.dcos.length > 0 || cur.name) result.push(cur);
+        }
+        // Parse group flags
+        var gColor = null, gType = defaultType, gEnabled = true, nameParts = [];
+        for (var j = 1; j < tokens.length; j++) {
+          var tok = tokens[j];
+          var tokLow = tok.toLowerCase();
+          if (tok.charAt(0) === '#' && /^#[0-9a-fA-F]{6}$/.test(tok)) gColor = tok;
+          else if (tokLow === 'p') gType = 'planes';
+          else if (tokLow === 'l') gType = 'lines';
+          else if (tokLow === 'off') gEnabled = false;
+          else nameParts.push(tok);
+        }
+        autoNum++;
+        cur = {
+          name: nameParts.length > 0 ? nameParts.join(' ') : 'Group ' + autoNum,
+          color: gColor,
+          defaultType: gType,
+          enabled: gEnabled,
+          dcos: [],
+          pairs: [],
+          entries: []
+        };
+        continue;
+      }
+
+      var entry = parseExtendedLine(lines[i], cur.defaultType, isStrike);
+      if (!entry) continue;
+      cur.dcos.push(entry.dcos);
+      cur.pairs.push(entry.pair);
+      cur.entries.push(entry);
+    }
+    // Push final group
+    if (cur.dcos.length > 0 || cur.name) result.push(cur);
+    return result;
+  }
+
   function plotData(quiet) {
     var text = $dataText.value.trim();
     if (!text) return;
@@ -3624,40 +3871,45 @@ var bearing = (() => {
       var defaultType = $dataType.value;
       var isStrike = $dataNotation.value === 'strike';
       var globalGC = $showGC.checked;
-      var lines = text.split(/\r?\n/);
+
+      groups = parseGroupedData(text, defaultType, isStrike);
       var nPlanes = 0, nLines = 0;
 
-      for (var i = 0; i < lines.length; i++) {
-        var entry = parseExtendedLine(lines[i], defaultType, isStrike);
-        if (!entry) continue;
+      for (var gi = 0; gi < groups.length; gi++) {
+        var grp = groups[gi];
+        if (!grp.enabled) continue;
 
-        currentDcos.push(entry.dcos);
-        currentPairs.push(entry.pair);
+        for (var ei = 0; ei < grp.entries.length; ei++) {
+          var entry = grp.entries[ei];
+          currentDcos.push(entry.dcos);
+          currentPairs.push(entry.pair);
 
-        if (entry.type === 'planes') {
-          var poleColor = entry.color || DEFAULT_PLANE_COLOR;
-          sn.pole(entry.pair[0], entry.pair[1], { fill: poleColor, r: 3 });
-          if (entry.gc || globalGC) {
-            var gcAlpha = DEFAULT_GC_OPACITY;
-            var gcColor = entry.color
-              ? hexToRgba(entry.color, gcAlpha)
-              : 'rgba(74,200,255,' + gcAlpha + ')';
-            sn.plane(entry.pair[0], entry.pair[1], { stroke: gcColor, strokeWidth: 0.8 });
+          // Color priority: line-level > group-level > global default
+          if (entry.type === 'planes') {
+            var poleColor = entry.color || grp.color || DEFAULT_PLANE_COLOR;
+            sn.pole(entry.pair[0], entry.pair[1], { fill: poleColor, r: 3 });
+            if (entry.gc || globalGC) {
+              var gcAlpha = DEFAULT_GC_OPACITY;
+              var gcColor = (entry.color || grp.color)
+                ? hexToRgba(entry.color || grp.color, gcAlpha)
+                : 'rgba(74,200,255,' + gcAlpha + ')';
+              sn.plane(entry.pair[0], entry.pair[1], { stroke: gcColor, strokeWidth: 0.8 });
+            }
+            nPlanes++;
+          } else {
+            var lineColor = entry.color || grp.color || DEFAULT_LINE_COLOR;
+            sn.line(entry.pair[0], entry.pair[1], { fill: lineColor, r: 3.5 });
+            if (entry.gc) {
+              var gcAlpha2 = DEFAULT_GC_OPACITY;
+              var gcColor2 = (entry.color || grp.color)
+                ? hexToRgba(entry.color || grp.color, gcAlpha2)
+                : 'rgba(255,170,68,' + gcAlpha2 + ')';
+              var normDD = entry.pair[0];
+              var normDip = 90 - entry.pair[1];
+              sn.plane(normDD, normDip, { stroke: gcColor2, strokeWidth: 0.8 });
+            }
+            nLines++;
           }
-          nPlanes++;
-        } else {
-          var lineColor = entry.color || DEFAULT_LINE_COLOR;
-          sn.line(entry.pair[0], entry.pair[1], { fill: lineColor, r: 3.5 });
-          if (entry.gc) {
-            var gcAlpha2 = DEFAULT_GC_OPACITY;
-            var gcColor2 = entry.color
-              ? hexToRgba(entry.color, gcAlpha2)
-              : 'rgba(255,170,68,' + gcAlpha2 + ')';
-            var normDD = entry.pair[0];
-            var normDip = 90 - entry.pair[1];
-            sn.plane(normDD, normDip, { stroke: gcColor2, strokeWidth: 0.8 });
-          }
-          nLines++;
         }
       }
 
@@ -3673,7 +3925,10 @@ var bearing = (() => {
         }
       }
       if (showContours && currentDcos.length >= 3) applyContours();
-      sn.render(); updateStats();
+      sn.render();
+      updateGroupSelector();
+      updateStats();
+      renderStereogram();
       $dataCount.textContent = 'n = ' + currentDcos.length;
     } catch (err) {
       setLED('err', 'red'); conLog('Parse error: ' + err.message);
@@ -3696,9 +3951,12 @@ var bearing = (() => {
   function clearData() {
     sn.clear(); sn.clearContours();
     currentDcos = []; currentPairs = [];
+    groups = []; selectedGroupIdx = -1;
     showContours = false;
     $('btn-contour').classList.remove('on');
-    sn.render(); updateStats();
+    sn.render();
+    updateGroupSelector();
+    updateStats();
     $dataCount.textContent = 'n = 0';
     setLED('data', 'off'); setLED('proc', 'off'); setLED('err', 'off'); setLED('exp', 'off');
   }
@@ -3794,19 +4052,57 @@ var bearing = (() => {
   // =========================================================================
   //  STATISTICS (instrument-style)
   // =========================================================================
+  function updateGroupSelector() {
+    var sel = $('stats-group-sel');
+    var dd = $('stats-group-dd');
+    var enabledGroups = groups.filter(function(g) { return g.enabled; });
+    // Hide if 0 or 1 group
+    if (enabledGroups.length <= 1 && groups.length <= 1) {
+      sel.style.display = 'none';
+      selectedGroupIdx = -1;
+      return;
+    }
+    sel.style.display = '';
+    // Preserve selection by name
+    var prevName = selectedGroupIdx >= 0 && selectedGroupIdx < groups.length ? groups[selectedGroupIdx].name : null;
+    var h = '<option value="-1">All groups</option>';
+    for (var i = 0; i < groups.length; i++) {
+      var g = groups[i];
+      var label = g.name + ' (n=' + g.dcos.length + ')' + (g.enabled ? '' : ' [off]');
+      h += '<option value="' + i + '">' + escHtml(label) + '</option>';
+    }
+    dd.innerHTML = h;
+    // Restore selection
+    if (prevName) {
+      for (var j = 0; j < groups.length; j++) {
+        if (groups[j].name === prevName) { dd.value = String(j); selectedGroupIdx = j; return; }
+      }
+    }
+    dd.value = String(selectedGroupIdx);
+  }
+
+  function getStatsDcos() {
+    if (selectedGroupIdx === -1) return currentDcos;
+    if (selectedGroupIdx >= 0 && selectedGroupIdx < groups.length) return groups[selectedGroupIdx].dcos;
+    return currentDcos;
+  }
+
   function updateStats() {
-    var n = currentDcos.length;
+    var dcos = getStatsDcos();
+    var n = dcos.length;
     // Update taskbar
     $('tb-n').textContent = n;
     $('tb-kappa').textContent = '--';
 
     if (n < 2) {
       $statsBody.innerHTML = '<div class="stats-empty">Load \u2265 2 measurements.</div>';
+      lastPA = null;
+      $('stats-plot-mount').innerHTML = '';
       return;
     }
 
-    var f = statistics.fisherStats(currentDcos);
-    var pa = statistics.principalAxes(currentDcos);
+    var f = statistics.fisherStats(dcos);
+    var pa = statistics.principalAxes(dcos);
     var h = '';
 
     // Taskbar kappa
@@ -3857,6 +4153,8 @@ var bearing = (() => {
     h += '</div>';
 
     $statsBody.innerHTML = h;
+    lastPA = pa;
+    renderFabricPlot();
   }
 
   function digi(label, value, warm) {
@@ -3888,6 +4186,511 @@ var bearing = (() => {
     if (dirText) h += '<span class="st-bar-dir">' + dirText + '</span>';
     h += '</div>';
     return h;
+  }
+
+  // =========================================================================
+  //  FABRIC PLOTS
+  // =========================================================================
+  function renderFabricPlot() {
+    var mount = $('stats-plot-mount');
+    if (!lastPA) { mount.innerHTML = ''; return; }
+
+    var paList = [];
+    var enabledGroups = groups.filter(function(g) { return g.enabled && g.dcos.length >= 2; });
+
+    if (selectedGroupIdx === -1 && enabledGroups.length > 1) {
+      // All groups mode with multiple groups: one point per group
+      for (var i = 0; i < enabledGroups.length; i++) {
+        var g = enabledGroups[i];
+        paList.push({
+          pa: statistics.principalAxes(g.dcos),
+          color: g.color || PALETTE[i % PALETTE.length],
+          name: g.name
+        });
+      }
+    } else {
+      // Single group or "All" with one group: use lastPA
+      var color = '#4ac8ff';
+      if (selectedGroupIdx >= 0 && selectedGroupIdx < groups.length && groups[selectedGroupIdx].color) {
+        color = groups[selectedGroupIdx].color;
+      }
+      paList.push({ pa: lastPA, color: color, name: '' });
+    }
+
+    if (activePlot === 'woodcock') mount.innerHTML = renderWoodcock(paList);
+    else mount.innerHTML = renderVollmer(paList);
+  }
+
+  function renderWoodcock(paList) {
+    // Woodcock/Flinn plot: x = ln(S2/S3), y = ln(S1/S2)
+    // K-lines: y = K*x (radiate from origin). K>1 cluster, K<1 girdle.
+    // C-lines: x + y = C (strength of preferred orientation).
+    var maxAxis = 7;
+    var sz = 220, pad = 28, plotSz = sz - 2 * pad;
+
+    // Pre-compute coordinates for all points and find maxAxis
+    var pts = [];
+    for (var pi = 0; pi < paList.length; pi++) {
+      var pa = paList[pi].pa;
+      var s1 = pa.eigenvalues[0], s2 = pa.eigenvalues[1], s3 = pa.eigenvalues[2];
+      var lnX = s2 > 0 && s3 > 0 ? Math.log(s2 / s3) : 0;
+      var lnY = s1 > 0 && s2 > 0 ? Math.log(s1 / s2) : 0;
+      if (lnX > maxAxis || lnY > maxAxis) maxAxis = Math.ceil(Math.max(lnX, lnY) + 1);
+      pts.push({ x: lnX, y: lnY, color: paList[pi].color, name: paList[pi].name });
+    }
+
+    function px(v) { return pad + (v / maxAxis) * plotSz; }
+    function py(v) { return pad + plotSz - (v / maxAxis) * plotSz; }
+
+    // Clamp line endpoints to plot area
+    function clampLine(x1, y1, x2, y2) {
+      // Clip to [0, maxAxis] in data space
+      var pts = [[x1, y1], [x2, y2]];
+      var out = [];
+      for (var i = 0; i < 2; i++) {
+        out.push([Math.max(0, Math.min(maxAxis, pts[i][0])), Math.max(0, Math.min(maxAxis, pts[i][1]))]);
+      }
+      return out;
+    }
+
+    var svg = '<svg viewBox="0 0 ' + sz + ' ' + sz + '" xmlns="http://www.w3.org/2000/svg">';
+    svg += '<defs><clipPath id="wcp"><rect x="' + pad + '" y="' + pad + '" width="' + plotSz + '" height="' + plotSz + '"/></clipPath></defs>';
+    svg += '<rect width="' + sz + '" height="' + sz + '" fill="#080e14"/>';
+    svg += '<rect x="' + pad + '" y="' + pad + '" width="' + plotSz + '" height="' + plotSz + '" fill="#0a1218" stroke="#1a2e3e" stroke-width="0.5"/>';
+
+    // Clipped group for K and C lines
+    svg += '<g clip-path="url(#wcp)">';
+
+    // C-lines (constant strength): x + y = C, so y = C - x
+    var cValues = [2, 4, 6];
+    for (var ci = 0; ci < cValues.length; ci++) {
+      var c = cValues[ci];
+      svg += '<line x1="' + px(0) + '" y1="' + py(c) + '" x2="' + px(c) + '" y2="' + py(0) + '" stroke="#162228" stroke-width="0.5" stroke-dasharray="2,3"/>';
+      // Label at midpoint
+      var cmx = c / 2, cmy = c / 2;
+      if (cmx <= maxAxis && cmy <= maxAxis) {
+        svg += '<text x="' + (px(cmx) + 3) + '" y="' + (py(cmy) - 3) + '" fill="#1e3838" font-size="6" font-family="Courier New">C=' + c + '</text>';
+      }
+    }
+
+    // K-lines (shape): y = K*x, radiate from origin
+    var kValues = [0.2, 0.5, 1, 2, 5];
+    var kLabels = ['0.2', '0.5', '1', '2', '5'];
+    for (var ki = 0; ki < kValues.length; ki++) {
+      var k = kValues[ki];
+      // Line from (0,0) to edge of plot
+      var endX, endY;
+      if (k >= 1) {
+        // Hits top edge first: y = maxAxis when x = maxAxis/k
+        endX = maxAxis / k; endY = maxAxis;
+      } else {
+        // Hits right edge first: x = maxAxis when y = maxAxis*k
+        endX = maxAxis; endY = maxAxis * k;
+      }
+      var stroke = k === 1 ? '#2a5a5a' : '#1a3a3a';
+      var sw = k === 1 ? '1' : '0.5';
+      svg += '<line x1="' + px(0) + '" y1="' + py(0) + '" x2="' + px(endX) + '" y2="' + py(endY) + '" stroke="' + stroke + '" stroke-width="' + sw + '"/>';
+      // Label near end
+      var lx = endX * 0.85, ly = endY * 0.85;
+      var anchor = k >= 1 ? 'end' : 'start';
+      var offx = k >= 1 ? -3 : 3;
+      var offy = k >= 1 ? 0 : 3;
+      svg += '<text x="' + (px(lx) + offx) + '" y="' + (py(ly) + offy) + '" fill="#2a5050" font-size="6" font-family="Courier New" text-anchor="' + anchor + '">K=' + kLabels[ki] + '</text>';
+    }
+
+    svg += '</g>';
+
+    // Field labels
+    svg += '<text x="' + (pad + 8) + '" y="' + (pad + 14) + '" fill="#3a6060" font-size="8" font-family="Courier New">CLUSTER</text>';
+    svg += '<text x="' + (pad + plotSz - 8) + '" y="' + (pad + plotSz - 6) + '" fill="#3a6060" font-size="8" font-family="Courier New" text-anchor="end">GIRDLE</text>';
+
+    // Axis labels
+    svg += '<text x="' + (sz / 2) + '" y="' + (sz - 3) + '" fill="#4a7070" font-size="8" font-family="Courier New" text-anchor="middle">ln(S\u2082/S\u2083)</text>';
+    svg += '<text x="6" y="' + (sz / 2) + '" fill="#4a7070" font-size="8" font-family="Courier New" text-anchor="middle" transform="rotate(-90,6,' + (sz / 2) + ')">ln(S\u2081/S\u2082)</text>';
+
+    // Tick labels
+    for (var t = 0; t <= maxAxis; t++) {
+      svg += '<text x="' + px(t) + '" y="' + (pad + plotSz + 10) + '" fill="#3a5a5a" font-size="7" font-family="Courier New" text-anchor="middle">' + t + '</text>';
+      svg += '<text x="' + (pad - 4) + '" y="' + (py(t) + 3) + '" fill="#3a5a5a" font-size="7" font-family="Courier New" text-anchor="end">' + t + '</text>';
+    }
+
+    // Data points
+    for (var di = 0; di < pts.length; di++) {
+      var dcx = px(Math.min(pts[di].x, maxAxis)), dcy = py(Math.min(pts[di].y, maxAxis));
+      var pColor = pts[di].color || '#4ac8ff';
+      svg += '<circle cx="' + dcx + '" cy="' + dcy + '" r="4" fill="' + pColor + '" opacity="0.9"/>';
+      svg += '<circle cx="' + dcx + '" cy="' + dcy + '" r="4" fill="none" stroke="' + pColor + '" stroke-width="0.5" opacity="0.5"/>';
+    }
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  function renderVollmer(paList) {
+    // Ternary plot: P (top), G (bottom-left), R (bottom-right)
+    // P + G + R = 1
+    var sz = 200, pad = 24;
+    var h = Math.sqrt(3) / 2; // height of unit equilateral triangle
+    var triW = sz - 2 * pad;
+    var triH = triW * h;
+    var top = pad;
+    var bot = pad + triH;
+    var cx = sz / 2;
+
+    // Triangle vertices: P(top), G(bottom-left), R(bottom-right)
+    var Px = cx, Py = top;
+    var Gx = pad, Gy = bot;
+    var Rx = pad + triW, Ry = bot;
+
+    function ternaryXY(p, g, r) {
+      var x = Gx * g + Rx * r + Px * p;
+      var y = Gy * g + Ry * r + Py * p;
+      return [x, y];
+    }
+
+    var svg = '<svg viewBox="0 0 ' + sz + ' ' + sz + '" xmlns="http://www.w3.org/2000/svg">';
+    svg += '<rect width="' + sz + '" height="' + sz + '" fill="#080e14"/>';
+
+    // Triangle outline
+    svg += '<polygon points="' + Px + ',' + Py + ' ' + Gx + ',' + Gy + ' ' + Rx + ',' + Ry + '" fill="#0a1218" stroke="#1a2e3e" stroke-width="0.5"/>';
+
+    // Grid lines (0.2 increments)
+    for (var i = 1; i < 5; i++) {
+      var f = i * 0.2;
+      // Lines parallel to each edge
+      var a1 = ternaryXY(f, 1 - f, 0), a2 = ternaryXY(f, 0, 1 - f);
+      svg += '<line x1="' + a1[0] + '" y1="' + a1[1] + '" x2="' + a2[0] + '" y2="' + a2[1] + '" stroke="#0f1a22" stroke-width="0.5"/>';
+      var b1 = ternaryXY(0, f, 1 - f), b2 = ternaryXY(1 - f, f, 0);
+      svg += '<line x1="' + b1[0] + '" y1="' + b1[1] + '" x2="' + b2[0] + '" y2="' + b2[1] + '" stroke="#0f1a22" stroke-width="0.5"/>';
+      var c1 = ternaryXY(0, 1 - f, f), c2 = ternaryXY(1 - f, 0, f);
+      svg += '<line x1="' + c1[0] + '" y1="' + c1[1] + '" x2="' + c2[0] + '" y2="' + c2[1] + '" stroke="#0f1a22" stroke-width="0.5"/>';
+    }
+
+    // Vertex labels
+    svg += '<text x="' + Px + '" y="' + (Py - 6) + '" fill="#4a7070" font-size="9" font-family="Courier New" text-anchor="middle">P</text>';
+    svg += '<text x="' + (Gx - 6) + '" y="' + (Gy + 10) + '" fill="#4a7070" font-size="9" font-family="Courier New" text-anchor="middle">G</text>';
+    svg += '<text x="' + (Rx + 6) + '" y="' + (Ry + 10) + '" fill="#4a7070" font-size="9" font-family="Courier New" text-anchor="middle">R</text>';
+
+    // Field labels (inside triangle)
+    var clPos = ternaryXY(0.7, 0.15, 0.15);
+    svg += '<text x="' + clPos[0] + '" y="' + clPos[1] + '" fill="#2a4a4a" font-size="7" font-family="Courier New" text-anchor="middle">cluster</text>';
+    var giPos = ternaryXY(0.15, 0.7, 0.15);
+    svg += '<text x="' + giPos[0] + '" y="' + giPos[1] + '" fill="#2a4a4a" font-size="7" font-family="Courier New" text-anchor="middle">girdle</text>';
+    var raPos = ternaryXY(0.15, 0.15, 0.7);
+    svg += '<text x="' + raPos[0] + '" y="' + raPos[1] + '" fill="#2a4a4a" font-size="7" font-family="Courier New" text-anchor="middle">random</text>';
+
+    // Data points
+    for (var di = 0; di < paList.length; di++) {
+      var pa = paList[di].pa;
+      var pColor = paList[di].color || '#4ac8ff';
+      var pt = ternaryXY(pa.P, pa.G, pa.R);
+      svg += '<circle cx="' + pt[0] + '" cy="' + pt[1] + '" r="4" fill="' + pColor + '" opacity="0.9"/>';
+      svg += '<circle cx="' + pt[0] + '" cy="' + pt[1] + '" r="4" fill="none" stroke="' + pColor + '" stroke-width="0.5" opacity="0.5"/>';
+    }
+
+    svg += '</svg>';
+    return svg;
+  }
+
+  // =========================================================================
+  //  STEREOGRAM (Magic Eye / SIRDS)
+  // =========================================================================
+  function renderStereogram() {
+    var canvas = $('stereo-canvas');
+    if (!canvas || !sn) return;
+    var win = $('win-stereo');
+    if (win.classList.contains('minimized')) return;
+
+    var container = $('stereo-canvas-wrap');
+    var w = Math.max(200, container.clientWidth);
+    var h = Math.max(100, container.clientHeight);
+    canvas.width = w; canvas.height = h;
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(w, h);
+    var data = img.data;
+
+    // Build depth map from stereonet projection
+    var radius = h / 2 - 10;
+    var cx = w / 2, cy = h / 2;
+    var depthMap = new Float32Array(w * h);
+    var proj = sn.projection || 'equal-area';
+    var R = sn.rotation || null;
+
+    for (var y = 0; y < h; y++) {
+      for (var x = 0; x < w; x++) {
+        var sx = (x - cx) / radius, sy = (y - cy) / radius;
+        var r2 = sx * sx + sy * sy;
+        if (r2 > 1) continue; // depth stays 0 outside circle
+
+        if (stereoSphere) {
+          // Fixed dome: depth from screen position only, data moves on surface
+          depthMap[y * w + x] = 0.4 * Math.sqrt(1 - r2);
+        } else {
+          // Bowl: follows rotation, full depth range
+          var dcos;
+          if (proj === 'equal-area') {
+            var k = Math.sqrt(1 - r2 / 4);
+            dcos = [sx * k, -sy * k, -(1 - r2 / 2)];
+          } else {
+            var denom = 1 + r2;
+            dcos = [2 * sx / denom, -2 * sy / denom, -(r2 - 1) / denom];
+          }
+          if (R) {
+            var Rt = mat3.transpose(R);
+            dcos = mat3.transformVec3(Rt, dcos);
+          }
+          depthMap[y * w + x] = Math.max(0, -dcos[2]);
+        }
+      }
+    }
+
+    // Add data points as bumps in the depth map
+    for (var dgi = 0; dgi < groups.length; dgi++) {
+      var dgrp = groups[dgi];
+      if (!dgrp.enabled) continue;
+      for (var dei = 0; dei < dgrp.entries.length; dei++) {
+        var dentry = dgrp.entries[dei];
+        var dc = dentry.dcos;
+        // Flip to lower hemisphere if needed
+        var pdc = dc[2] > 0 ? [-dc[0], -dc[1], -dc[2]] : [dc[0], dc[1], dc[2]];
+        // Apply rotation
+        if (R) pdc = mat3.transformVec3(R, pdc);
+        // Project
+        var dpx, dpy;
+        if (proj === 'equal-area') {
+          var f = Math.sqrt(2 / (1 - pdc[2]));
+          dpx = pdc[0] * f; dpy = -pdc[1] * f;
+        } else {
+          var f2 = 1 / (1 - pdc[2]);
+          dpx = pdc[0] * f2; dpy = -pdc[1] * f2;
+        }
+        var ix = Math.round(cx + dpx * radius), iy = Math.round(cy + dpy * radius);
+        // Paint a bump (gaussian-ish)
+        var bumpR = 8;
+        for (var by = -bumpR; by <= bumpR; by++) {
+          for (var bx = -bumpR; bx <= bumpR; bx++) {
+            var bix = ix + bx, biy = iy + by;
+            if (bix < 0 || bix >= w || biy < 0 || biy >= h) continue;
+            var bd = (bx * bx + by * by) / (bumpR * bumpR);
+            if (bd > 1) continue;
+            var bump = 0.35 * (1 - bd);
+            var bidx = biy * w + bix;
+            depthMap[bidx] = Math.min(1, depthMap[bidx] + bump);
+          }
+        }
+      }
+    }
+
+    // Add great circle ridges in the depth map
+    if (stereoGC && currentPairs.length > 0) {
+      for (var gci = 0; gci < groups.length; gci++) {
+        var gcgrp = groups[gci];
+        if (!gcgrp.enabled) continue;
+        for (var gcei = 0; gcei < gcgrp.entries.length; gcei++) {
+          var gcentry = gcgrp.entries[gcei];
+          if (gcentry.type !== 'planes') continue;
+          var pole = gcentry.dcos;
+          for (var gy = 0; gy < h; gy++) {
+            for (var gx = 0; gx < w; gx++) {
+              var gsx = (gx - cx) / radius, gsy = (gy - cy) / radius;
+              if (gsx * gsx + gsy * gsy > 1) continue;
+              var gdcos;
+              if (proj === 'equal-area') {
+                var gk = Math.sqrt(1 - (gsx * gsx + gsy * gsy) / 4);
+                gdcos = [gsx * gk, -gsy * gk, -(1 - (gsx * gsx + gsy * gsy) / 2)];
+              } else {
+                var gd = 1 + gsx * gsx + gsy * gsy;
+                gdcos = [2 * gsx / gd, -2 * gsy / gd, -(gsx * gsx + gsy * gsy - 1) / gd];
+              }
+              if (R) gdcos = mat3.transformVec3(mat3.transpose(R), gdcos);
+              var dot = Math.abs(pole[0] * gdcos[0] + pole[1] * gdcos[1] + pole[2] * gdcos[2]);
+              if (dot < 0.06) {
+                var ridge = 0.25 * (1 - dot / 0.06);
+                var gidx = gy * w + gx;
+                depthMap[gidx] = Math.min(1, depthMap[gidx] + ridge);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    var strip = stereoStrip;
+
+    if (stereoDebug) {
+      // Debug: render depth map directly as grayscale
+      for (var dy = 0; dy < h; dy++) {
+        for (var dx = 0; dx < w; dx++) {
+          var di = dy * w + dx;
+          var dv = Math.round(depthMap[di] * 255);
+          var doff = di * 4;
+          data[doff] = dv; data[doff + 1] = dv; data[doff + 2] = dv; data[doff + 3] = 255;
+        }
+      }
+    } else {
+      // SIRDS generation
+      var maxShift = Math.round(strip * 0.3);
+      var pattern = new Uint8Array(strip * 3);
+      var rng = 1337;
+      function rand() { rng = (rng * 16807 + 0) % 2147483647; return (rng & 0x7fffffff) / 2147483647; }
+
+      for (var sy2 = 0; sy2 < h; sy2++) {
+        for (var si = 0; si < strip; si++) {
+          var v = Math.floor(rand() * 60) + 20;
+          pattern[si * 3] = Math.floor(v * 0.3);
+          pattern[si * 3 + 1] = Math.floor(v * 0.8 + rand() * 30);
+          pattern[si * 3 + 2] = Math.floor(v * 0.7 + rand() * 20);
+        }
+
+        var links = new Int32Array(w);
+        for (var sx2 = 0; sx2 < w; sx2++) links[sx2] = sx2;
+
+        for (var sx3 = 0; sx3 < w; sx3++) {
+          var depth = depthMap[sy2 * w + sx3];
+          var shift = Math.round(strip - depth * maxShift);
+          var left = sx3 - Math.floor(shift / 2);
+          var right = left + shift;
+          if (left >= 0 && right < w) {
+            if (links[right] === right) links[right] = left;
+          }
+        }
+
+        for (var sx4 = 0; sx4 < w; sx4++) {
+          var target = links[sx4];
+          while (links[target] !== target) target = links[target];
+          links[sx4] = target;
+        }
+
+        var colors = new Int32Array(w * 3);
+        for (var ci = 0; ci < w * 3; ci++) colors[ci] = -1;
+
+        for (var sx5 = 0; sx5 < w; sx5++) {
+          var root = links[sx5];
+          if (colors[root * 3] < 0) {
+            var pi2 = ((root % strip) + strip) % strip;
+            colors[root * 3] = pattern[pi2 * 3];
+            colors[root * 3 + 1] = pattern[pi2 * 3 + 1];
+            colors[root * 3 + 2] = pattern[pi2 * 3 + 2];
+          }
+          var off = (sy2 * w + sx5) * 4;
+          data[off] = colors[root * 3];
+          data[off + 1] = colors[root * 3 + 1];
+          data[off + 2] = colors[root * 3 + 2];
+          data[off + 3] = 255;
+        }
+      }
+    }
+
+    ctx.putImageData(img, 0, 0);
+
+    // Alignment triangles — two downward-pointing triangles separated by one strip width
+    var triSize = 5;
+    var triLeft = Math.floor(cx - strip / 2);
+    var triRight = triLeft + strip;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.moveTo(triLeft - triSize, 0);
+    ctx.lineTo(triLeft + triSize, 0);
+    ctx.lineTo(triLeft, triSize * 1.5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(triRight - triSize, 0);
+    ctx.lineTo(triRight + triSize, 0);
+    ctx.lineTo(triRight, triSize * 1.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function initStereogramDrag() {
+    var canvas = $('stereo-canvas');
+    var stereoDragging = false;
+
+    canvas.style.cursor = 'grab';
+    canvas.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      canvas.requestPointerLock();
+      e.preventDefault();
+    });
+    document.addEventListener('pointerlockchange', function() {
+      if (document.pointerLockElement === canvas) {
+        stereoDragging = true;
+        canvas.style.cursor = 'grabbing';
+      } else {
+        stereoDragging = false;
+        canvas.style.cursor = 'grab';
+      }
+    });
+    document.addEventListener('mousemove', function(e) {
+      if (!stereoDragging) return;
+      var dx = e.movementX, dy = e.movementY;
+      var clamp = 80;
+      dx = Math.max(-clamp, Math.min(clamp, dx));
+      dy = Math.max(-clamp, Math.min(clamp, dy));
+      var s = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
+      var delta = mat3.multiply(Rx, Ry);
+      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+      sn.setRotation(mat3.orthonormalize(R));
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render();
+      updateViewDisplay();
+    });
+    document.addEventListener('mouseup', function() {
+      if (stereoDragging) document.exitPointerLock();
+    });
+    // Controls
+    $('stereo-sphere').addEventListener('click', function() {
+      stereoSphere = true;
+      $('stereo-sphere').classList.add('active');
+      $('stereo-bowl').classList.remove('active');
+      renderStereogram();
+    });
+    $('stereo-bowl').addEventListener('click', function() {
+      stereoSphere = false;
+      $('stereo-bowl').classList.add('active');
+      $('stereo-sphere').classList.remove('active');
+      renderStereogram();
+    });
+    $('stereo-gc').addEventListener('click', function() {
+      stereoGC = !stereoGC;
+      $('stereo-gc').classList.toggle('toggled', stereoGC);
+      renderStereogram();
+    });
+    $('stereo-strip').value = stereoStrip;
+    $('stereo-strip').addEventListener('input', function() {
+      stereoStrip = parseInt(this.value);
+      localStorage.setItem('stereoStrip', stereoStrip);
+      renderStereogram();
+    });
+    $('stereo-sep-label').addEventListener('click', function() {
+      stereoStrip = 40;
+      $('stereo-strip').value = 40;
+      localStorage.removeItem('stereoStrip');
+      renderStereogram();
+    });
+
+    // Re-render on window resize
+    var stereoResizeTimer = null;
+    new ResizeObserver(function() {
+      clearTimeout(stereoResizeTimer);
+      stereoResizeTimer = setTimeout(renderStereogram, 100);
+    }).observe($('stereo-canvas-wrap'));
+  }
+
+  function toggleStereogram() {
+    var win = $('win-stereo');
+    var tb = $('tb-stereo');
+    if (win.classList.contains('minimized')) {
+      win.classList.remove('minimized');
+      tb.style.display = '';
+      tb.classList.add('active');
+      renderStereogram();
+    } else {
+      win.classList.add('minimized');
+      tb.classList.remove('active');
+    }
   }
 
   // =========================================================================
@@ -4204,12 +5007,37 @@ var bearing = (() => {
     $('win-con').addEventListener('click', function(e) {
       if (!e.target.closest('.win-btn')) $consoleIn.focus();
     });
+    var cmdHistory = [], cmdHistIdx = -1, cmdDraft = '';
     $consoleIn.addEventListener('keydown', function(e) {
-      if (e.key === 'Enter') {
+      if (e.key === 'ArrowUp') {
+        if (cmdHistory.length === 0) return;
+        e.preventDefault();
+        if (cmdHistIdx < 0) cmdDraft = $consoleIn.value;
+        if (cmdHistIdx < cmdHistory.length - 1) cmdHistIdx++;
+        $consoleIn.value = cmdHistory[cmdHistIdx];
+      } else if (e.key === 'ArrowDown') {
+        if (cmdHistIdx < 0) return;
+        e.preventDefault();
+        cmdHistIdx--;
+        $consoleIn.value = cmdHistIdx < 0 ? cmdDraft : cmdHistory[cmdHistIdx];
+      } else if (e.key === 'Enter') {
         var input = $consoleIn.value.trim();
         $consoleIn.value = '';
         if (!input) return;
+        cmdHistory.unshift(input);
+        cmdHistIdx = -1;
+        cmdDraft = '';
         conLog('> ' + input);
+        if (adventureMode) {
+          var ar = window.AdventureGame.command(input);
+          if (ar === null) {
+            adventureMode = false;
+            conLog('Returning to OS\u00B2 console.\n');
+          } else {
+            conLog(ar);
+          }
+          return;
+        }
         var r = execCmd(input);
         if (r) conLog(r);
       }
@@ -4223,7 +5051,7 @@ var bearing = (() => {
   function execCmd(input) {
     var p = input.split(/\s+/), cmd = p[0].toLowerCase(), args = p.slice(1);
     switch (cmd) {
-      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  spin <azim> <plunge> <angle> [tps] | off,\n  new, save <name>, load [name|#], projects,\n  cls, about';
+      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  spin <azim> <plunge> <angle> [tps] | off,\n  groups, group <n|name|all>, stereogram [dm],\n  new, save <name>, load [name|#], projects,\n  cls, about';
       case 'plot': plotData(); return '';
       case 'clear': clearData(); return 'Data cleared.';
       case 'stats': return getStatsText();
@@ -4241,6 +5069,41 @@ var bearing = (() => {
       case 'sample': loadSample(); return '';
       case 'cls': $consoleOut.innerHTML = ''; return '';
       case 'about': return 'OS\u00B2 \u2014 OpenStereoOperatingSystem v1.0\nbearing.js stereonet library\nGeoscientifical Chaos Union\n"Serious science. Questionable aesthetics."';
+      case 'stereogram': case 'sirds':
+        if (args[0] === 'dm' || args[0] === 'debug') {
+          stereoDebug = !stereoDebug;
+          if (!$('win-stereo').classList.contains('minimized')) renderStereogram();
+          return 'Stereogram debug ' + (stereoDebug ? 'ON — showing depth map.' : 'OFF — showing SIRDS.');
+        }
+        toggleStereogram();
+        return $('win-stereo').classList.contains('minimized') ? 'Stereogram closed.' : 'Stereogram opened. Unfocus your eyes!';
+      case 'adventure':
+        var advSetup = function() {
+          window.AdventureGame.onPlot(function(readings) {
+            var lines = readings.map(function(r) { return r[0] + ' ' + r[1]; });
+            $dataText.value = '# Field readings from ADVENTURE\n' + lines.join('\n');
+            $dataType.value = 'planes'; $dataNotation.value = 'dip-direction';
+            plotData(true);
+          });
+          adventureMode = true;
+        };
+        if (window.AdventureGame) {
+          advSetup();
+          return window.AdventureGame.start();
+        }
+        var advScript = document.createElement('script');
+        // Detect path: index.html at root vs demo.template.html in examples/
+        var advPath = location.pathname.indexOf('/examples/') >= 0 ? 'adventure.js' : 'examples/adventure.js';
+        advScript.src = advPath;
+        advScript.onload = function() {
+          advSetup();
+          conLog(window.AdventureGame.start());
+        };
+        advScript.onerror = function() {
+          conLog('ADVENTURE requires uplink. Connect to network and try again.');
+        };
+        document.head.appendChild(advScript);
+        return 'Loading ADVENTURE...';
       case 'new': newWorkspace(); return 'New workspace.';
       case 'save': saveProject(args.join(' ')); return '';
       case 'load': loadProjectByNameOrIndex(args.join(' ')); return '';
@@ -4284,12 +5147,56 @@ var bearing = (() => {
         }
         if (args.length < 3) return 'Usage: spin <azim> <plunge> <angle> [tps]\n  Each value can have +/-N for per-tick delta.\n  E.g.: spin 0+1 0 0  or  spin 120 30+0.5 0-2 60\n  spin off to stop.';
         return startSpin(args);
+      case 'groups':
+        if (groups.length === 0) return 'No groups defined.';
+        var gl = ['Groups:'];
+        for (var gi = 0; gi < groups.length; gi++) {
+          var gg = groups[gi];
+          gl.push('  ' + (gi + 1) + '. ' + gg.name +
+            ' (n=' + gg.dcos.length + ', ' + gg.defaultType +
+            (gg.color ? ', ' + gg.color : '') +
+            (gg.enabled ? '' : ', off') + ')');
+        }
+        return gl.join('\n');
+      case 'group':
+        if (args.length === 0) return 'Usage: group <n|name|all>';
+        var ga = args.join(' ').toLowerCase();
+        if (ga === 'all') {
+          selectedGroupIdx = -1;
+          $('stats-group-dd').value = '-1';
+          updateStats();
+          return 'Stats: all groups.';
+        }
+        var gn = parseInt(args[0]);
+        var found = -1;
+        if (!isNaN(gn) && gn >= 1 && gn <= groups.length) {
+          found = gn - 1;
+        } else {
+          for (var gsi = 0; gsi < groups.length; gsi++) {
+            if (groups[gsi].name.toLowerCase() === ga) { found = gsi; break; }
+          }
+        }
+        if (found < 0) return 'Group not found: ' + args.join(' ');
+        selectedGroupIdx = found;
+        $('stats-group-dd').value = String(found);
+        updateStats();
+        // Palette sync
+        if (groups[found].color) {
+          PALETTE[0] = groups[found].color;
+          var gsw = document.querySelector('.pal-swatch[data-pal="0"]');
+          if (gsw) gsw.style.background = groups[found].color;
+          activeColor = 0;
+          document.querySelectorAll('.pal-swatch').forEach(function(s) { s.classList.remove('active'); });
+          if (gsw) gsw.classList.add('active');
+        }
+        return 'Stats: ' + groups[found].name + '.';
       default: return 'Unknown: ' + cmd;
     }
   }
   function getStatsText() {
-    if (currentDcos.length < 2) return 'Not enough data (n < 2).';
-    var f = statistics.fisherStats(currentDcos), pa = statistics.principalAxes(currentDcos);
+    var dcos = getStatsDcos();
+    if (dcos.length < 2) return 'Not enough data (n < 2).';
+    var f = statistics.fisherStats(dcos), pa = statistics.principalAxes(dcos);
     return 'n=' + f.n + ' R=' + fmt(f.R) + ' Rbar=' + fmt(f.Rbar, 3) +
       '\n\u03ba=' + fmt(f.kappa) + ' \u03b1\u2089\u2085=' + fmt(f.alpha95) + '\u00b0' +
       '\nMean: ' + fmtTP(f.mean) +
@@ -4404,6 +5311,15 @@ var bearing = (() => {
   //  BUTTONS
   // =========================================================================
   function initButtons() {
+    // Fabric plot tabs (scoped to stats area only)
+    document.querySelectorAll('#stats-plot-tabs .spt-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('#stats-plot-tabs .spt-tab').forEach(function(t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        activePlot = tab.dataset.plot;
+        renderFabricPlot();
+      });
+    });
     $('btn-contour').addEventListener('click', toggleContour);
     $('btn-clear').addEventListener('click', clearData);
     $('btn-export').addEventListener('click', exportSVG);
@@ -4418,6 +5334,19 @@ var bearing = (() => {
       }
     });
     $showGC.addEventListener('change', function() { if (currentDcos.length > 0) plotData(); });
+    $('stats-group-dd').addEventListener('change', function() {
+      selectedGroupIdx = parseInt(this.value);
+      updateStats();
+      // Palette sync: update PALETTE[0] and swatch when selecting a group with a color
+      if (selectedGroupIdx >= 0 && selectedGroupIdx < groups.length && groups[selectedGroupIdx].color) {
+        PALETTE[0] = groups[selectedGroupIdx].color;
+        var sw0 = document.querySelector('.pal-swatch[data-pal="0"]');
+        if (sw0) sw0.style.background = groups[selectedGroupIdx].color;
+        activeColor = 0;
+        document.querySelectorAll('.pal-swatch').forEach(function(s) { s.classList.remove('active'); });
+        if (sw0) sw0.classList.add('active');
+      }
+    });
     $dataType.addEventListener('change', function() {
       $dataNotation.style.display = $dataType.value === 'lines' ? 'none' : '';
       $showGC.parentElement.style.display = $dataType.value === 'lines' ? 'none' : '';
@@ -4524,6 +5453,7 @@ var bearing = (() => {
     initZine();
     initProjectBinder();
     initReferences();
+    initStereogramDrag();
     updateStats();
     updateViewDisplay();
     tick(); setInterval(tick, 30000);
