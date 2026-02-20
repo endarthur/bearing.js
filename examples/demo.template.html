@@ -1,0 +1,2681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS² — BEARING SYSTEMS Stereonet Terminal</title>
+<style>
+/* === RESET === */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #0c0c0c;
+  font-family: 'Courier New', Consolas, monospace;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  padding: 16px;
+  overflow: hidden;
+}
+
+/* === HARDWARE FRAME === */
+#hw {
+  flex: 1; height: 100%;
+  background: linear-gradient(165deg, #2e2e2e 0%, #1c1c1c 35%, #242424 100%);
+  border-radius: 12px;
+  position: relative;
+  box-shadow:
+    0 0 0 2px #3a3a3a,
+    0 0 0 4px #0e0e0e,
+    0 12px 48px rgba(0,0,0,0.85),
+    inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+/* === SCREWS (corners only) === */
+.screw {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 36% 30%, #5a5a5a, #1a1a1a 72%);
+  border: 1px solid #0a0a0a;
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.12), 0 1px 3px rgba(0,0,0,0.6);
+  z-index: 10;
+}
+.screw::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 16%; right: 16%; height: 2px;
+  background: linear-gradient(180deg, #080808, #3a3a3a);
+  transform: translateY(-50%) rotate(35deg);
+  border-radius: 1px;
+}
+
+/* === CRT SCREEN === */
+#crt {
+  position: absolute;
+  top: 22px; left: 22px; right: 22px; bottom: 46px;
+  background: #050a0e;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 60px rgba(0,0,0,0.6),
+    inset 0 0 3px rgba(0,0,0,0.9),
+    0 0 1px #000;
+}
+#crt::before {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 1px, rgba(0,0,0,0.08) 1px, rgba(0,0,0,0.08) 2px);
+  pointer-events: none; z-index: 90;
+}
+#crt::after {
+  content: '';
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.3) 100%);
+  pointer-events: none; z-index: 91;
+}
+
+/* === BOOT SEQUENCE === */
+#boot {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  padding: 28px 36px;
+  color: #33ff33;
+  font-size: 13px; line-height: 1.7;
+  z-index: 50;
+  white-space: pre-wrap; overflow: hidden;
+}
+#boot.done { opacity: 0; transition: opacity 0.5s; pointer-events: none; }
+.boot-cursor {
+  display: inline-block;
+  width: 8px; height: 13px;
+  background: #33ff33;
+  animation: blink 0.7s infinite;
+  vertical-align: text-bottom;
+}
+@keyframes blink { 0%,49%{opacity:1} 50%,100%{opacity:0} }
+
+/* === DESKTOP === */
+#desktop {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background:
+    radial-gradient(circle at 25% 35%, rgba(12,22,32,1) 0%, transparent 55%),
+    radial-gradient(circle at 70% 65%, rgba(8,18,28,1) 0%, transparent 50%),
+    #070c10;
+  opacity: 0; transition: opacity 0.7s ease 0.2s;
+}
+#desktop.visible { opacity: 1; }
+
+/* === TASKBAR === */
+#taskbar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  height: 28px;
+  background: linear-gradient(180deg, #14202c, #0c1620);
+  border-top: 1px solid #1e3040;
+  display: flex; align-items: center;
+  padding: 0 5px; gap: 2px; z-index: 20;
+}
+.tb-app {
+  height: 20px; padding: 0 8px;
+  background: #0c1620;
+  border: 1px solid #1e3040;
+  border-radius: 2px;
+  color: #5a7a7a; font-size: 10px;
+  cursor: pointer; white-space: nowrap; line-height: 20px;
+}
+.tb-app:hover { background: #162a3a; color: #a0d0d0; }
+.tb-app.active { background: #1a2e3e; color: #a0d0d0; border-color: #2a4a5a; }
+.tb-spacer { flex: 1; }
+.tb-stat {
+  color: #2a5a5a; font-size: 9px;
+  padding: 0 6px;
+  border-left: 1px solid #152228;
+  white-space: nowrap;
+}
+.tb-stat .tb-lbl { color: #1e3a3a; }
+.tb-stat .tb-v { color: #3a7a7a; }
+#tb-clock { color: #3a6060; font-size: 10px; padding-right: 4px; }
+#tb-status { color: #2a4a4a; font-size: 9px; padding: 0 6px; border-left: 1px solid #152228; }
+
+/* === WINDOW MANAGER === */
+.window {
+  position: absolute;
+  background: #0c1620;
+  border: 1px solid #1a2e3e;
+  border-radius: 3px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.45);
+  display: flex; flex-direction: column;
+}
+.window.minimized { display: none !important; }
+.win-tb {
+  height: 24px;
+  background: linear-gradient(180deg, #162636, #0e1c26);
+  border-bottom: 1px solid #1a2e3e;
+  border-radius: 3px 3px 0 0;
+  display: flex; align-items: center;
+  padding: 0 6px;
+  cursor: grab; user-select: none; flex-shrink: 0;
+}
+.win-tb:active { cursor: grabbing; }
+.win-title { color: #6a8a9a; font-size: 11px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.win-btn {
+  width: 13px; height: 13px; border-radius: 50%;
+  border: none; margin-left: 3px; cursor: pointer;
+  font-size: 8px; line-height: 13px; text-align: center;
+  color: #111; padding: 0;
+}
+.win-min { background: #b90; }
+.win-close { background: #b44; }
+.win-min:hover { background: #db0; }
+.win-close:hover { background: #d66; }
+.win-body {
+  flex: 1; overflow: auto; padding: 5px;
+  color: #8ab0b0; font-size: 11px; line-height: 1.5;
+}
+.win-body::-webkit-scrollbar { width: 5px; }
+.win-body::-webkit-scrollbar-track { background: #0a1218; }
+.win-body::-webkit-scrollbar-thumb { background: #1a2e3e; border-radius: 2px; }
+
+/* === STEREONET WINDOW === */
+#win-sn > .win-body { display: flex; flex-direction: column; }
+#sn-mount { text-align: center; cursor: grab; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+#sn-mount:active { cursor: grabbing; }
+#sn-mount svg { display: block; width: 100%; height: auto; }
+#sn-mount svg text { fill: #c0d0d0 !important; }
+.sn-readout {
+  display: flex; align-items: center; gap: 6px;
+  padding: 3px 6px;
+  font-size: 9px;
+  border-top: 1px solid #0c1820;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.sn-readout .rd-lbl { color: #2a4848; text-transform: uppercase; letter-spacing: 1px; font-size: 8px; }
+.sn-readout .rd-val { color: #5a9a8a; }
+.sn-readout .rd-sep { color: #152228; margin: 0 2px; }
+.sn-tools { display: flex; gap: 3px; padding: 2px 0 0; flex-wrap: wrap; flex-shrink: 0; }
+.sn-tools button {
+  flex: 1; min-width: 56px;
+  padding: 3px 5px;
+  background: #0e1c26; border: 1px solid #1a2e3e; border-radius: 2px;
+  color: #5a8a8a; font-family: 'Courier New', monospace; font-size: 10px; cursor: pointer;
+}
+.sn-tools button:hover { background: #162a3a; color: #a0d8d8; }
+.sn-tools button.on { background: #1a3636; color: #4fc; border-color: #2a4e4e; }
+
+/* === COLOR PALETTE === */
+.rd-spacer { flex: 1; }
+.sn-palette { display: flex; gap: 2px; align-items: center; }
+.pal-swatch {
+  width: 16px; height: 16px; border-radius: 2px;
+  border: 2px solid transparent; cursor: pointer;
+  transition: border-color 0.15s;
+}
+.pal-swatch:hover { border-color: #5a8a8a; }
+.pal-swatch.active { border-color: #aff; }
+#color-picker-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
+
+/* === DATA WINDOW === */
+#win-data > .win-body { display: flex; flex-direction: column; }
+.data-row { display: flex; gap: 3px; margin-bottom: 3px; flex-shrink: 0; }
+.data-row select {
+  flex: 1; padding: 2px 3px;
+  background: #0e1c26; border: 1px solid #1a2e3e; border-radius: 2px;
+  color: #8ab0b0; font-family: 'Courier New', monospace; font-size: 10px;
+}
+#data-text {
+  width: 100%; flex: 1; min-height: 60px;
+  background: #070e14; border: 1px solid #1a2e3e; border-radius: 2px;
+  color: #90c0a0; font-family: 'Courier New', monospace; font-size: 11px;
+  padding: 3px 5px; resize: none; margin-bottom: 3px;
+}
+#data-text::placeholder { color: #1e3830; }
+#data-text::-webkit-scrollbar { width: 5px; }
+#data-text::-webkit-scrollbar-track { background: #070e14; }
+#data-text::-webkit-scrollbar-thumb { background: #1a2e3e; border-radius: 2px; }
+.pb-comment textarea::-webkit-scrollbar { width: 4px; }
+.pb-comment textarea::-webkit-scrollbar-track { background: #f0ece0; }
+.pb-comment textarea::-webkit-scrollbar-thumb { background: #c0b8a0; border-radius: 2px; }
+.data-actions { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; flex-shrink: 0; }
+.data-actions button {
+  padding: 2px 7px;
+  background: #0e1c26; border: 1px solid #1a2e3e; border-radius: 2px;
+  color: #5a8a8a; font-family: 'Courier New', monospace; font-size: 10px; cursor: pointer;
+}
+.data-actions button:hover { background: #162a3a; color: #a0d8d8; }
+.data-actions label {
+  font-size: 10px; color: #4a7070; cursor: pointer;
+  display: flex; align-items: center; gap: 0;
+}
+.data-actions label input[type="checkbox"] {
+  -webkit-appearance: none; appearance: none;
+  width: 28px; height: 14px; border-radius: 7px;
+  background: #0a1218; border: 1px solid #1a2e3e;
+  position: relative; cursor: pointer; transition: background 0.2s;
+  margin-right: 3px; flex-shrink: 0;
+}
+.data-actions label input[type="checkbox"]::after {
+  content: ''; position: absolute;
+  top: 2px; left: 2px; width: 8px; height: 8px;
+  border-radius: 50%; background: #2a4a5a;
+  transition: transform 0.15s, background 0.15s;
+}
+.data-actions label input[type="checkbox"]:checked {
+  background: #1a3636; border-color: #2a5a5a;
+}
+.data-actions label input[type="checkbox"]:checked::after {
+  transform: translateX(14px); background: #4fc;
+}
+#data-count { font-size: 10px; color: #3a5a5a; margin-left: auto; }
+
+/* === STATS WINDOW (instrument-style) === */
+#stats-body { font-size: 10px; line-height: 1.4; }
+.stats-empty { color: #2a4a4a; font-style: italic; padding: 12px 0; text-align: center; }
+
+/* Digital readout boxes */
+.st-digi-row { display: flex; gap: 4px; margin: 4px 0 6px; }
+.st-digi {
+  flex: 1;
+  background: #050a10;
+  border: 1px solid #1a2a3a;
+  border-radius: 2px;
+  padding: 3px 4px;
+  text-align: center;
+}
+.st-digi-lbl {
+  display: block; font-size: 7px; color: #3a5858;
+  text-transform: uppercase; letter-spacing: 1px;
+}
+.st-digi-val {
+  display: block;
+  font-size: 17px; font-weight: bold;
+  color: #4ae8e8;
+  text-shadow: 0 0 6px rgba(74,232,232,0.25);
+  letter-spacing: 1px;
+}
+.st-digi-val.warm {
+  color: #f0a030;
+  text-shadow: 0 0 6px rgba(240,160,48,0.25);
+}
+
+/* LED bars (eigenvalues, Vollmer) */
+.st-bar { display: flex; align-items: center; gap: 3px; margin: 2px 0; }
+.st-bar-lbl { width: 16px; font-size: 9px; color: #4a7070; flex-shrink: 0; }
+.st-bar-track { display: flex; gap: 1px; flex: 1; }
+.st-bar-seg {
+  flex: 1; height: 5px;
+  background: #0a1218;
+  border-radius: 1px;
+  transition: background 0.3s, box-shadow 0.3s;
+}
+.st-bar-seg.g { background: #1a8a6a; box-shadow: 0 0 3px rgba(26,138,106,0.4); }
+.st-bar-seg.y { background: #aa8a20; box-shadow: 0 0 3px rgba(170,138,32,0.3); }
+.st-bar-seg.r { background: #aa4040; box-shadow: 0 0 3px rgba(170,64,64,0.3); }
+.st-bar-val { width: 34px; font-size: 9px; color: #6a9a9a; text-align: right; flex-shrink: 0; }
+.st-bar-dir { font-size: 9px; color: #4a7a7a; margin-left: 3px; flex-shrink: 0; }
+
+/* Stats text rows */
+.st-section { margin-bottom: 5px; padding-bottom: 4px; border-bottom: 1px solid #0c1820; }
+.st-section:last-child { border-bottom: none; margin-bottom: 0; }
+.st-head { font-size: 8px; color: #3a6060; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 3px; }
+.st-row { display: flex; justify-content: space-between; }
+.st-lbl { color: #4a7070; }
+.st-val { color: #8ac8c8; text-align: right; }
+.st-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.st-fabric-label {
+  font-size: 9px; color: #3a6868;
+  text-align: center; margin-top: 2px;
+  font-style: italic;
+}
+
+/* === CONSOLE WINDOW === */
+#console-out {
+  flex: 1; overflow-y: auto;
+  font-size: 11px; line-height: 1.4;
+  color: #609060; padding-bottom: 3px;
+  white-space: pre-wrap; word-break: break-all;
+}
+#console-out::-webkit-scrollbar { width: 4px; }
+#console-out::-webkit-scrollbar-track { background: #070e14; }
+#console-out::-webkit-scrollbar-thumb { background: #1a2a2a; border-radius: 2px; }
+.con-input {
+  display: flex; align-items: center;
+  border-top: 1px solid #152020;
+  padding-top: 2px; flex-shrink: 0;
+}
+.con-prompt { color: #3a7a3a; font-size: 12px; margin-right: 3px; }
+#console-in {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: #90c090; font-family: 'Courier New', monospace; font-size: 11px;
+  caret-color: #4f4;
+}
+
+/* === BOTTOM BEZEL STRIP === */
+#bezel-strip {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  padding: 0 30px;
+}
+.bz-leds {
+  display: flex; gap: 12px;
+  flex-shrink: 0;
+}
+.led-unit {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 2px;
+}
+.led {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,0,0,0.4);
+  transition: all 0.3s;
+}
+.led-off { background: #1e1e1e; }
+.led-green { background: #0c0; box-shadow: 0 0 6px #0c0, 0 0 2px #0c0; }
+.led-amber { background: #fa0; box-shadow: 0 0 6px #fa0, 0 0 2px #fa0; }
+.led-red { background: #f33; box-shadow: 0 0 6px #f33, 0 0 2px #f33; }
+.led-blue { background: #28f; box-shadow: 0 0 6px #28f, 0 0 2px #28f; }
+.led-lbl {
+  font-size: 6.5px; color: #3a3a3a;
+  letter-spacing: 0.5px; text-transform: uppercase;
+}
+
+.bz-gh {
+  display: flex; align-items: center; margin-left: 10px;
+  opacity: 0.5; transition: opacity 0.2s;
+}
+.bz-gh:hover { opacity: 1; }
+.bz-gh svg { fill: #666; }
+.bz-gh:hover svg { fill: #aaa; }
+.bz-center { flex: 1; display: flex; justify-content: center; }
+.nameplate {
+  background: linear-gradient(180deg, #3a3a3a, #2a2a2a 30%, #333);
+  border: 1px solid #444;
+  border-radius: 2px;
+  padding: 2px 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 1px 2px rgba(0,0,0,0.4);
+}
+.np-title {
+  font-family: 'Arial Black', Impact, sans-serif;
+  font-size: 11px; color: #999;
+  letter-spacing: 3px; text-transform: uppercase;
+  text-align: center;
+}
+.np-model {
+  font-size: 7px; color: #555;
+  letter-spacing: 1px; text-align: center;
+}
+
+.bz-switches {
+  display: flex; gap: 12px;
+  flex-shrink: 0;
+}
+.hw-sw { text-align: center; }
+.sw-label {
+  font-size: 7px; color: #444;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 2px;
+  display: block;
+}
+.sw-group {
+  display: inline-flex;
+  border: 1px solid #2a2a2a;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.sw-opt {
+  padding: 3px 9px;
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  background: #111;
+  color: #444;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  border-right: 1px solid #2a2a2a;
+}
+.sw-opt:last-child { border-right: none; }
+.sw-opt.active {
+  background: #1a2a1a;
+  color: #8fc;
+  box-shadow: inset 0 0 10px rgba(80,200,120,0.12);
+}
+.sw-opt:hover:not(.active) { background: #1a1a1a; color: #666; }
+
+/* === WINDOW RESIZE HANDLE === */
+.win-resize {
+  position: absolute; bottom: 0; right: 0;
+  width: 14px; height: 14px;
+  cursor: nwse-resize; z-index: 5;
+}
+.win-resize::after {
+  content: ''; position: absolute;
+  bottom: 3px; right: 3px;
+  width: 7px; height: 7px;
+  border-right: 2px solid #2a4a5a;
+  border-bottom: 2px solid #2a4a5a;
+}
+
+/* === SIDE TABS === */
+#side-tabs {
+  position: absolute; right: 0; top: 50%;
+  transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 4px;
+  z-index: 210;
+}
+.side-tab {
+  writing-mode: vertical-rl; text-orientation: mixed;
+  font-family: 'Courier New', monospace;
+  font-size: 11px; font-weight: bold;
+  padding: 14px 5px;
+  cursor: pointer;
+  border-radius: 4px 0 0 4px;
+  letter-spacing: 2px; text-transform: uppercase;
+  box-shadow: -2px 0 6px rgba(0,0,0,0.3);
+  user-select: none; transition: background 0.2s;
+}
+#tab-manual { background: #c8b88a; color: #3a2a1a; }
+#tab-manual:hover { background: #dac89a; }
+#tab-projects { background: #2a3a5a; color: #8a9ab0; }
+#tab-projects:hover { background: #3a4a6a; }
+#tab-refs { background: #d8d4c8; color: #666; }
+#tab-refs:hover { background: #e8e4d8; }
+
+/* === PROJECT BINDER OVERLAY === */
+#project-overlay {
+  position: absolute;
+  top: 22px; left: 22px; right: 22px; bottom: 46px;
+  background: rgba(0,0,0,0.7);
+  z-index: 300; display: none;
+  align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+#project-overlay.open { display: flex; }
+#project-book {
+  width: 90%; max-width: 600px; height: 92%; max-height: 700px;
+  background: #1e2e4a; border-radius: 2px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.6);
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+}
+.pb-rings {
+  position: absolute; left: 10px; top: 30px; bottom: 50px;
+  width: 14px; display: flex; flex-direction: column;
+  justify-content: space-around; z-index: 2;
+}
+.pb-ring {
+  width: 14px; height: 14px; border: 2px solid #8a8a8a;
+  border-radius: 50%; background: transparent;
+}
+.pb-pages { flex: 1; padding: 16px 16px 16px 34px; overflow-y: auto; }
+.pb-title {
+  font-family: 'Courier New', monospace; font-size: 13px;
+  color: #8a9ab0; text-transform: uppercase; letter-spacing: 2px;
+  border-bottom: 1px solid #2a3a5a; padding-bottom: 6px; margin-bottom: 12px;
+}
+.pb-empty {
+  color: #4a5a7a; font-style: italic; text-align: center;
+  padding: 40px 0; font-size: 11px;
+}
+.pb-project {
+  background: #f4efe6; border-radius: 3px;
+  padding: 10px; margin-bottom: 10px;
+  display: flex; gap: 10px; align-items: flex-start;
+}
+.pb-floppy {
+  width: 72px; height: 72px; background: #111;
+  border-radius: 3px 3px 0 0; position: relative; flex-shrink: 0;
+}
+.pb-floppy-slider {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 32px; height: 10px; background: #888; border-radius: 0 0 2px 2px;
+}
+.pb-floppy-label {
+  position: absolute; bottom: 5px; left: 7px; right: 7px;
+  height: 26px; background: #f0ece0; border-radius: 1px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 7px; color: #333; font-family: 'Courier New', monospace;
+  padding: 2px; text-align: center; overflow: hidden;
+}
+.pb-floppy-notch {
+  position: absolute; bottom: 3px; left: 3px;
+  width: 7px; height: 7px; border: 1.5px solid #333; border-radius: 50%;
+}
+.pb-info { flex: 1; font-family: 'Courier New', monospace; min-width: 0; }
+.pb-name { font-size: 12px; font-weight: bold; color: #1a1a1a; margin-bottom: 3px; }
+.pb-dates { font-size: 8px; color: #888; margin-bottom: 4px; }
+.pb-comment textarea {
+  width: 100%; height: 36px; background: #faf8f0;
+  border: 1px solid #d0c8b0; border-radius: 2px;
+  font-family: 'Courier New', monospace; font-size: 9px;
+  color: #555; padding: 3px 5px; resize: none; margin-bottom: 4px;
+}
+.pb-actions { display: flex; gap: 4px; }
+.pb-actions button {
+  padding: 2px 8px; font-family: 'Courier New', monospace;
+  font-size: 9px; cursor: pointer; border-radius: 2px; border: 1px solid;
+}
+.pb-btn-load { background: #1a3a4a; border-color: #2a5a6a; color: #8ad0d0; }
+.pb-btn-load:hover { background: #2a4a5a; }
+.pb-btn-delete { background: #4a1a1a; border-color: #6a2a2a; color: #d08a8a; }
+.pb-btn-delete:hover { background: #5a2a2a; }
+.pb-nav {
+  height: 36px; background: #182840;
+  border-top: 1px solid #2a3a5a;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+}
+.pb-nav-btn {
+  padding: 3px 12px; background: #1e2e4a; border: 1px solid #2a4a6a;
+  border-radius: 2px; font-family: 'Courier New', monospace;
+  font-size: 10px; cursor: pointer; color: #6a8aa0;
+}
+.pb-nav-btn:hover { background: #2a3a5a; }
+.pb-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.pb-pagenum { font-family: 'Courier New', monospace; font-size: 10px; color: #4a6a80; }
+.pb-close {
+  position: absolute; top: 6px; right: 8px;
+  width: 22px; height: 22px; background: #2a3a5a;
+  border: 1px solid #3a5a7a; border-radius: 50%;
+  font-size: 14px; line-height: 20px; text-align: center;
+  cursor: pointer; color: #8a9ab0; z-index: 5;
+}
+.pb-close:hover { background: #3a4a6a; }
+
+/* === REFERENCE OVERLAY === */
+#ref-overlay {
+  position: absolute;
+  top: 22px; left: 22px; right: 22px; bottom: 46px;
+  background: rgba(0,0,0,0.7);
+  z-index: 300; display: none;
+  align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+#ref-overlay.open { display: flex; }
+#ref-panel {
+  width: 90%; max-width: 500px; max-height: 90%;
+  background: #f4efe6; border-radius: 2px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.6);
+  padding: 24px 26px; overflow-y: auto; position: relative;
+}
+.ref-close {
+  position: absolute; top: 8px; right: 10px;
+  width: 22px; height: 22px; background: #d0c0a0;
+  border: 1px solid #b8a888; border-radius: 50%;
+  font-size: 14px; line-height: 20px; text-align: center;
+  cursor: pointer; color: #6a5a3a;
+}
+.ref-close:hover { background: #c0b090; }
+.ref-title {
+  font-family: 'Courier New', monospace; font-size: 14px; font-weight: bold;
+  text-transform: uppercase; letter-spacing: 2px; color: #1a1a1a;
+  border-bottom: 2px solid #333; padding-bottom: 3px; margin-bottom: 12px;
+}
+.ref-entry { margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #e0d8c8; }
+.ref-entry:last-child { border-bottom: none; }
+.ref-authors { font-family: Georgia, serif; font-size: 11px; color: #1a1a1a; }
+.ref-atitle { font-family: Georgia, serif; font-size: 11px; color: #333; font-style: italic; margin: 1px 0; }
+.ref-journal { font-family: Georgia, serif; font-size: 10px; color: #888; }
+.ref-doi { margin-top: 1px; }
+.ref-doi a {
+  font-family: 'Courier New', monospace; font-size: 8px;
+  color: #2a6a8a; text-decoration: none;
+}
+.ref-doi a:hover { text-decoration: underline; }
+
+/* === ZINE OVERLAY === */
+#zine-overlay {
+  position: absolute;
+  top: 22px; left: 22px; right: 22px; bottom: 46px;
+  background: rgba(0,0,0,0.7);
+  z-index: 300;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+}
+#zine-overlay.open { display: flex; }
+
+#zine-book {
+  width: 640px;
+  height: 92%;
+  max-height: 740px;
+  background: #f4efe6;
+  border-radius: 2px;
+  box-shadow: 0 10px 50px rgba(0,0,0,0.6), 5px 5px 0 #d8d0c0, -2px -2px 0 #e0d8c8;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Zine pages */
+.z-pages {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+.z-page {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  padding: 30px 34px;
+  overflow-y: auto;
+  opacity: 0;
+  transform: translateX(30px);
+  transition: opacity 0.3s, transform 0.3s;
+  pointer-events: none;
+}
+.z-page::-webkit-scrollbar { width: 5px; }
+.z-page::-webkit-scrollbar-track { background: #ece6da; }
+.z-page::-webkit-scrollbar-thumb { background: #c8c0a8; border-radius: 2px; }
+.z-page.active {
+  opacity: 1; transform: translateX(0);
+  pointer-events: auto;
+}
+.z-page.exit-left {
+  opacity: 0; transform: translateX(-30px);
+}
+
+/* Zine navigation */
+.z-nav {
+  height: 40px;
+  background: #e8e0d4;
+  border-top: 1px solid #d0c8b8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+.z-nav-btn {
+  padding: 4px 14px;
+  background: #d8d0c0;
+  border: 1px solid #c0b8a0;
+  border-radius: 2px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  color: #4a3a2a;
+}
+.z-nav-btn:hover { background: #c8c0b0; }
+.z-nav-btn:disabled { opacity: 0.3; cursor: default; }
+.z-pagenum {
+  font-family: 'Courier New', monospace;
+  font-size: 10px; color: #8a7a6a;
+}
+.z-close {
+  position: absolute;
+  top: 8px; right: 10px;
+  width: 24px; height: 24px;
+  background: #d0c0a0;
+  border: 1px solid #b8a888;
+  border-radius: 50%;
+  font-size: 14px; line-height: 22px;
+  text-align: center; cursor: pointer;
+  color: #6a5a3a; z-index: 5;
+}
+.z-close:hover { background: #c0b090; }
+
+/* === ZINE TYPOGRAPHY === */
+.z-cover { text-align: center; padding: 20px 0; }
+.z-cover h1 {
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 28px; color: #1a1a1a;
+  text-transform: uppercase; letter-spacing: 5px; line-height: 1.2;
+}
+.z-sub {
+  font-family: Georgia, serif;
+  font-style: italic; font-size: 12px; color: #666; margin-top: 6px;
+}
+.z-issue {
+  font-family: 'Courier New', monospace;
+  font-size: 10px; color: #888;
+  margin-top: 10px; letter-spacing: 3px;
+}
+.z-price {
+  display: inline-block; margin-top: 10px;
+  border: 2px solid #333; padding: 3px 12px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px; font-weight: bold;
+}
+.z-barcode {
+  font-family: 'Courier New', monospace;
+  font-size: 7px; letter-spacing: 3px; color: #bbb; margin-top: 6px;
+}
+
+.z-h2 {
+  font-family: 'Courier New', monospace;
+  font-size: 15px; font-weight: bold;
+  text-transform: uppercase; letter-spacing: 2px;
+  color: #1a1a1a;
+  border-bottom: 2px solid #333;
+  padding-bottom: 3px; margin-bottom: 10px;
+}
+.z-body {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 12px; line-height: 1.7; color: #2a2a2a;
+}
+.z-body p { margin-bottom: 8px; }
+.z-mono {
+  font-family: 'Courier New', monospace;
+  font-size: 10.5px;
+  background: #eae4d6;
+  padding: 8px 10px;
+  border-radius: 2px;
+  margin: 8px 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.z-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+/* Stickers */
+.sticker {
+  display: inline-block;
+  padding: 3px 8px;
+  font-family: 'Arial Black', Impact, sans-serif;
+  font-size: 10px; font-weight: bold;
+  box-shadow: 1px 1px 3px rgba(0,0,0,0.2);
+}
+.sticker.yellow { background: #ffe033; color: #1a1a1a; }
+.sticker.pink { background: #f6a; color: #fff; }
+.sticker.blue { background: #4af; color: #fff; }
+.sticker.green { background: #4c4; color: #fff; }
+.sticker.orange { background: #f80; color: #fff; }
+.sticker.white { background: #fff; color: #333; border: 1px solid #ccc; }
+.sticker.right { float: right; margin: 4px 0 4px 8px; }
+
+/* Zine stereonet — scuffed photocopy look */
+#zine-sn-mount svg { width: 100%; height: auto; }
+#zine-sn-mount svg > circle:first-child { fill: transparent !important; }
+#zine-sn-mount {
+  filter: contrast(1.6) brightness(0.95) saturate(0);
+  opacity: 0.8;
+  transform: rotate(-0.7deg);
+}
+.sticker.center { display: block; text-align: center; margin: 6px auto; width: fit-content; }
+
+.rubber-stamp {
+  display: inline-block;
+  border: 3px solid; padding: 4px 14px;
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 16px; text-transform: uppercase;
+  opacity: 0.6;
+}
+.stamp-red { border-color: #b33; color: #b33; }
+.stamp-blue { border-color: #248; color: #248; }
+.stamp-green { border-color: #283; color: #283; }
+
+.z-ad {
+  border: 2px solid #333; padding: 14px; margin: 14px 0;
+  text-align: center; background: #ede8dc; position: relative;
+}
+.z-ad h3 {
+  font-family: Impact, 'Arial Black', sans-serif;
+  font-size: 17px; text-transform: uppercase;
+  letter-spacing: 2px; margin-bottom: 3px;
+}
+.z-ad .z-tagline {
+  font-family: Georgia, serif;
+  font-size: 16px; font-style: italic; color: #333; margin: 4px 0;
+}
+.z-ad .z-fine {
+  font-size: 9px; color: #999; margin-top: 4px;
+}
+.z-letter {
+  font-family: Georgia, serif;
+  font-size: 11px; line-height: 1.6; color: #333;
+  border-left: 3px solid #999;
+  padding: 6px 0 6px 12px; margin: 10px 0;
+  font-style: italic;
+}
+.z-sig {
+  font-style: normal; font-size: 10px;
+  color: #777; margin-top: 3px;
+}
+.z-margin-note {
+  float: right;
+  width: 100px;
+  font-size: 9px;
+  color: #888;
+  font-family: 'Courier New', monospace;
+  border-left: 2px solid #ccc;
+  padding-left: 6px;
+  margin: 4px 0 4px 10px;
+  font-style: italic;
+}
+.z-redmark {
+  color: #c22;
+  font-weight: bold;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+}
+.z-cross {
+  text-decoration: line-through;
+  color: #999;
+}
+
+/* === ANIMATIONS === */
+@keyframes flicker {
+  0%,100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.97; }
+  94% { opacity: 1; }
+  97% { opacity: 0.985; }
+}
+#crt { animation: flicker 7s infinite; }
+</style>
+</head>
+<body>
+
+<div id="hw">
+  <!-- Screws (corners only) -->
+  <div class="screw" style="top:8px;left:8px"></div>
+  <div class="screw" style="top:8px;right:8px"></div>
+  <div class="screw" style="bottom:8px;left:8px"></div>
+  <div class="screw" style="bottom:8px;right:8px"></div>
+
+  <!-- CRT Screen (full width) -->
+  <div id="crt">
+    <div id="boot"></div>
+    <div id="desktop">
+      <!-- Stereonet -->
+      <div class="window" id="win-sn" style="left:8px;top:6px;width:576px;height:556px" data-name="Stereonet" data-min-w="300" data-min-h="350">
+        <div class="win-tb"><span class="win-title">&#x2B21; Stereonet</span><button class="win-btn win-min">&#8722;</button></div>
+        <div class="win-body">
+          <div id="sn-mount"></div>
+          <div class="sn-readout">
+            <span class="rd-lbl">Cur</span><span class="rd-val" id="sn-cur-val">---/--</span>
+            <span class="rd-sep">&#9474;</span>
+            <span class="rd-lbl">DD</span><span class="rd-val" id="sn-pole-val">---/--</span>
+            <span class="rd-sep">&#9474;</span>
+            <span class="rd-lbl">View</span><span class="rd-val" id="sn-view-val">000/90</span>
+            <span class="rd-spacer"></span>
+            <div class="sn-palette">
+              <div class="pal-swatch active" data-pal="0"></div>
+              <div class="pal-swatch" data-pal="1"></div>
+              <div class="pal-swatch" data-pal="2"></div>
+              <div class="pal-swatch" data-pal="3"></div>
+              <div class="pal-swatch" data-pal="4"></div>
+              <div class="pal-swatch" data-pal="5"></div>
+              <div class="pal-swatch" data-pal="6"></div>
+              <div class="pal-swatch" data-pal="7"></div>
+            </div>
+          </div>
+          <div class="sn-tools">
+            <button id="btn-contour">&#9673; Contour</button>
+            <button id="btn-clear">&#10005; Clear</button>
+            <button id="btn-export">&#8595; Export</button>
+            <button id="btn-reset">&#10227; Reset</button>
+          </div>
+          <input type="color" id="color-picker-hidden">
+        </div>
+        <div class="win-resize"></div>
+      </div>
+      <!-- Data -->
+      <div class="window" id="win-data" style="left:592px;top:6px;width:636px;height:278px" data-name="Data" data-min-w="280" data-min-h="180">
+        <div class="win-tb"><span class="win-title">&#9776; Data</span><button class="win-btn win-min">&#8722;</button></div>
+        <div class="win-body">
+          <div class="data-row">
+            <select id="data-type"><option value="planes">Planes</option><option value="lines">Lines</option></select>
+            <select id="data-notation"><option value="dip-direction">Dip Dir</option><option value="strike">Strike</option></select>
+          </div>
+          <textarea id="data-text" placeholder="Paste data...&#10;120/45&#10;125 42"></textarea>
+          <div class="data-actions">
+            <button id="btn-plot">&#9654; Plot</button>
+            <button id="btn-sample">&#8635; Sample</button>
+            <button id="btn-save">&#128190; Save</button>
+            <label><input type="checkbox" id="show-gc"> GC</label>
+            <span id="data-count">n = 0</span>
+          </div>
+        </div>
+        <div class="win-resize"></div>
+      </div>
+      <!-- Stats -->
+      <div class="window" id="win-stats" style="left:592px;top:292px;width:636px;height:474px" data-name="Stats" data-min-w="250" data-min-h="200">
+        <div class="win-tb"><span class="win-title">&#9636; Statistics</span><button class="win-btn win-min">&#8722;</button></div>
+        <div class="win-body" id="stats-body"><div class="stats-empty">Load data to view.</div></div>
+        <div class="win-resize"></div>
+      </div>
+      <!-- Console -->
+      <div class="window" id="win-con" style="left:8px;top:570px;width:576px;height:196px" data-name="Console" data-min-w="250" data-min-h="120">
+        <div class="win-tb"><span class="win-title">&gt;_ Console</span><button class="win-btn win-min">&#8722;</button></div>
+        <div class="win-body" style="display:flex;flex-direction:column">
+          <div id="console-out"></div>
+          <div class="con-input"><span class="con-prompt">&gt;&nbsp;</span><input type="text" id="console-in" spellcheck="false" autocomplete="off" placeholder="type help"></div>
+        </div>
+        <div class="win-resize"></div>
+      </div>
+      <!-- Taskbar -->
+      <div id="taskbar">
+        <span class="tb-app active" data-win="win-sn">&#x2B21; Stereonet</span>
+        <span class="tb-app active" data-win="win-data">&#9776; Data</span>
+        <span class="tb-app active" data-win="win-stats">&#9636; Stats</span>
+        <span class="tb-app active" data-win="win-con">&gt;_ Console</span>
+        <span class="tb-spacer"></span>
+        <span class="tb-stat"><span class="tb-lbl">n</span>=<span class="tb-v" id="tb-n">0</span></span>
+        <span class="tb-stat"><span class="tb-lbl">&#954;</span>=<span class="tb-v" id="tb-kappa">--</span></span>
+        <span class="tb-stat"><span class="tb-lbl">cur</span> <span class="tb-v" id="tb-cursor">---/--</span></span>
+        <span class="tb-spacer"></span>
+        <span id="tb-project" class="tb-stat" style="display:none"><span class="tb-lbl">prj</span> <span class="tb-v" id="tb-project-name"></span></span>
+        <span id="tb-status">OS&#178; v1.0</span>
+        <span id="tb-clock"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Bezel Strip -->
+  <div id="bezel-strip">
+    <div class="bz-leds">
+      <div class="led-unit"><span class="led led-off" id="led-data"></span><span class="led-lbl">DATA</span></div>
+      <div class="led-unit"><span class="led led-off" id="led-proc"></span><span class="led-lbl">PROC</span></div>
+      <div class="led-unit"><span class="led led-off" id="led-err"></span><span class="led-lbl">ERR</span></div>
+      <div class="led-unit"><span class="led led-off" id="led-exp"></span><span class="led-lbl">EXP</span></div>
+    </div>
+    <a href="https://github.com/endarthur/bearing.js" target="_blank" class="bz-gh" title="bearing.js on GitHub">
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="#555"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    </a>
+    <div class="bz-center">
+      <div class="nameplate">
+        <div class="np-title">BEARING SYSTEMS</div>
+        <div class="np-model">BS-7700 STEREONET TERMINAL &mdash; S/N: 0042-1977</div>
+      </div>
+    </div>
+    <div class="bz-switches">
+      <div class="hw-sw">
+        <span class="sw-label">Proj</span>
+        <div class="sw-group" id="sw-proj">
+          <button class="sw-opt active" data-val="equal-area">EA</button>
+          <button class="sw-opt" data-val="equal-angle">EQ</button>
+        </div>
+      </div>
+      <div class="hw-sw">
+        <span class="sw-label">Net</span>
+        <div class="sw-group" id="sw-net">
+          <button class="sw-opt active" data-val="equatorial">WUL</button>
+          <button class="sw-opt" data-val="polar">POL</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Tabs -->
+  <div id="side-tabs">
+    <div class="side-tab" id="tab-manual">MANUAL</div>
+    <div class="side-tab" id="tab-projects">PROJECTS</div>
+    <div class="side-tab" id="tab-refs">REFS</div>
+  </div>
+
+  <!-- Zine Overlay -->
+  <div id="zine-overlay">
+    <div id="zine-book">
+      <button class="z-close" id="zine-close">&times;</button>
+      <div class="z-pages">
+
+        <!-- PAGE 1: Cover -->
+        <div class="z-page active" data-p="0">
+          <div class="z-cover">
+            <h1>The Structural<br>Geologist's<br>Companion</h1>
+            <div class="z-sub">A BEARING SYSTEMS Publication</div>
+            <div class="z-issue">ISSUE #1 &mdash; STEREONETS FOREVER</div>
+            <div class="z-price">FREE / PRICELESS</div>
+            <div class="z-barcode">||| || |||| | || ||| || 7 70042 19770</div>
+            <div style="margin:16px 0 8px">
+              <span class="rubber-stamp stamp-red" style="transform:rotate(-6deg)">APPROVED</span>
+            </div>
+            <div>
+              <span class="sticker yellow" style="transform:rotate(3deg)">LOWER HEMISPHERE ONLY</span>
+              <span class="sticker blue" style="transform:rotate(-2deg);margin-left:8px">PEER REVIEWED*</span>
+            </div>
+            <div style="font-size:8px;color:#bbb;margin-top:8px">*by Gauss, the family's westie</div>
+          </div>
+        </div>
+
+        <!-- PAGE 2: What Is A Stereonet -->
+        <div class="z-page" data-p="1">
+          <div class="z-h2">What Is A Stereonet?</div>
+          <span class="sticker green right" style="transform:rotate(-3deg)">IMPORTANT</span>
+          <div class="z-body">
+            <p>A stereonet is a <strong>lower-hemisphere stereographic projection</strong> &mdash;
+            a way to flatten a hemisphere onto a flat circle so you can plot and analyse
+            3D orientations on a flat surface.</p>
+            <div class="z-margin-note">Think: squashing a salad bowl flat, mathematically.</div>
+            <p>Imagine looking straight down into a bowl. Every plane slicing through
+            the bowl traces an arc (<em>great circle</em>), and the perpendicular to that
+            plane pierces the bowl at a single point (<em>pole</em>).</p>
+            <div id="zine-stereonet" style="text-align:center;margin:8px 0;position:relative">
+              <div id="zine-sn-mount" style="display:inline-block;width:220px"></div>
+              <div style="position:absolute;right:140px;top:38%;font-family:'Courier New',monospace;font-size:10px;color:#555">&larr; great circles<br>&nbsp;&nbsp;&nbsp;are arcs</div>
+            </div>
+            <p>Two projections exist:</p>
+            <div class="z-cols">
+              <div>
+                <strong>Equal-Area</strong><br>
+                (Schmidt / Lambert)<br>
+                Preserves density.<br>
+                <em>Use for statistics.</em>
+                <div><span class="sticker yellow" style="transform:rotate(1deg);margin-top:4px">THIS IS DEFAULT</span></div>
+              </div>
+              <div>
+                <strong>Equal-Angle</strong><br>
+                (Wulff / Stereographic)<br>
+                Preserves angles.<br>
+                <em>Use for constructions.</em>
+                <div><span class="sticker white" style="transform:rotate(-1deg);margin-top:4px">NICHE USE</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 3: Notation Guide -->
+        <div class="z-page" data-p="2">
+          <div class="z-h2">Notation Guide</div>
+          <span class="rubber-stamp stamp-green" style="transform:rotate(3deg);float:right;margin:-4px 0 8px 8px">MEMORIZE</span>
+          <div class="z-body">
+            <p><strong>Planes</strong> are described by two angles:</p>
+            <div class="z-mono"><strong>Dip Direction / Dip</strong>
+120/45  &rarr; dips 45&deg; toward azimuth 120&deg;
+
+<strong>Strike / Dip (Right-Hand Rule)</strong>
+030/45  &rarr; strike N30&deg;E, dip 45&deg; to the right
+         (dip direction = strike + 90&deg; = 120&deg;)</div>
+            <span class="sticker pink" style="transform:rotate(-2deg)">RIGHT-HAND RULE!</span>
+            <p style="margin-top:8px"><strong>Lines</strong> (fold axes, lineations, etc.):</p>
+            <div class="z-mono"><strong>Trend / Plunge</strong>
+120/45  &rarr; plunges 45&deg; toward azimuth 120&deg;</div>
+            <p><strong>Quadrant notation</strong> is also supported:</p>
+            <div class="z-mono">N45E &rarr;  45&deg;    S30W &rarr; 210&deg;
+N0   &rarr;   0&deg;    S30E &rarr; 150&deg;</div>
+            <div class="z-margin-note">
+              <span class="z-redmark">NB:</span> Clar compass users: your readings are already in dip-direction format. <em>Alles Clar?</em>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 4: Reading The Plots -->
+        <div class="z-page" data-p="3">
+          <div class="z-h2">Reading The Plots</div>
+          <div class="z-body">
+            <span class="sticker orange right" style="transform:rotate(2deg)">ESSENTIAL</span>
+            <p><strong>Poles</strong> (dots): Each dot = one plane's orientation.
+            A cluster of poles = a set of similarly oriented planes.
+            A girdle of poles = folded rocks.</p>
+            <p><strong>Great circles</strong> (arcs): The trace of the plane itself.
+            Vertical planes pass through the center. Horizontal planes plot as the outer circle.</p>
+            <p><strong>Contours</strong>: Density in <em>Multiples of Uniform Density</em> (MUD).</p>
+            <div class="z-mono">MUD = 1  &rarr; random background level
+MUD = 3  &rarr; 3&times; random expectation
+MUD = 6  &rarr; strong preferred orientation
+MUD = 10 &rarr; <span class="z-redmark">VERY</span> strong</div>
+            <div style="text-align:center;margin:10px 0">
+              <span class="sticker green" style="transform:rotate(-1deg);font-size:12px">MUD &gt; 3 = REAL SIGNAL</span>
+            </div>
+            <p><strong>Mean direction</strong> (large dot): The Fisher mean of all poles.
+            The <em>confidence cone</em> (dashed circle) shows the 95% uncertainty region.</p>
+            <p><strong>Eigenvectors</strong> (V1, V2, V3): Principal directions of the distribution.
+            V1 = maximum concentration, V3 = minimum. For a girdle, V3 is the fold axis.</p>
+          </div>
+        </div>
+
+        <!-- PAGE 5: Fisher Statistics -->
+        <div class="z-page" data-p="4">
+          <div class="z-h2">Fisher Statistics</div>
+          <span class="sticker blue right" style="transform:rotate(3deg)">FOR CLUSTERS</span>
+          <div class="z-body">
+            <p>The Fisher distribution is the spherical equivalent of the normal distribution.
+            Use it when your data forms a <em>single cluster</em>.</p>
+            <div class="z-mono"><strong>&kappa; (kappa)</strong> &mdash; Concentration parameter
+  &kappa; &gt; 50  very tight cluster
+  &kappa; ~ 20  moderate cluster
+  &kappa; ~ 5   dispersed
+  &kappa; &lt; 2   nearly random
+
+<strong>&alpha;&#8325;&#8325;</strong> &mdash; 95% confidence cone
+  The mean lies within this cone
+  with 95% probability.
+  &alpha;95 &lt; 5&deg;  = excellent
+  &alpha;95 ~ 10&deg; = decent
+  &alpha;95 &gt; 20&deg; = <span class="z-cross">don't publish this</span>
+                <span class="z-redmark">&larr; SIC</span>
+
+<strong>R&#772; (Rbar)</strong> &mdash; Mean resultant length
+  Range: 0 (chaos) to 1 (perfection)
+  R&#772; &gt; 0.9 = well clustered</div>
+            <div style="margin-top:8px">
+              <span class="sticker yellow" style="transform:rotate(-3deg)">&kappa; &gt; 20 = PUBLISHABLE</span>
+              <span class="sticker pink" style="transform:rotate(2deg);margin-left:6px">MAYBE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 6: Eigenvalues, Woodcock, Vollmer, Bingham -->
+        <div class="z-page" data-p="5">
+          <div class="z-h2">Fabric Analysis</div>
+          <div class="z-body">
+            <p><strong>Woodcock Parameters</strong> (shape + strength):</p>
+            <div class="z-mono">K = ln(S1/S2) / ln(S2/S3)
+  K &gt; 1 &rarr; <strong>cluster</strong>  (bedding)
+  K &lt; 1 &rarr; <strong>girdle</strong>   (fold)
+  K = 1 &rarr; transitional
+
+C = ln(S1/S3)
+  C &asymp; 0 &rarr; random
+  C &gt; 3 &rarr; strong fabric
+  C &gt; 5 &rarr; <span class="z-redmark">VERY</span> strong</div>
+            <span class="sticker orange center" style="transform:rotate(-1deg)">WOODCOCK (1977) &mdash; SEMINAL PAPER</span>
+            <p><strong>Vollmer Triangle</strong> (P + G + R = 1):</p>
+            <div class="z-mono">  P = S1 - S2     (point/cluster)
+  G = 2(S2 - S3)  (girdle)
+  R = 3 &middot; S3      (random)
+
+        P = 1
+        /\
+       /  \        Ternary plot.
+      / &bull;  \       Your data
+     /      \      goes here.
+    /________\
+G = 1      R = 1</div>
+            <span class="sticker white right" style="transform:rotate(2deg)">EIGENVALUES FTW</span>
+            <p><strong>Bingham Parameters</strong>: &kappa;&#8321; and &kappa;&#8322; describe
+            the concentration along V2 and V3 (both &le; 0). More negative = more concentrated.</p>
+          </div>
+        </div>
+
+        <!-- PAGE 7: Console Commands -->
+        <div class="z-page" data-p="6">
+          <div class="z-h2">Console Reference</div>
+          <span class="sticker yellow right" style="transform:rotate(-2deg)">RTFM</span>
+          <div class="z-body">
+            <p>The OS&#178; console accepts the following commands:</p>
+            <div class="z-mono"><strong>help</strong>      &mdash; show available commands
+<strong>plot</strong>      &mdash; parse &amp; plot data from Data window
+<strong>clear</strong>     &mdash; clear all plotted data
+<strong>stats</strong>     &mdash; print statistics to console
+<strong>contour</strong>   &mdash; toggle density contours
+<strong>export</strong>    &mdash; download stereonet as SVG
+<strong>rotate</strong> &lt;t&gt; &lt;p&gt; &mdash; set view center
+<strong>reset</strong>     &mdash; reset to standard view
+<strong>sample</strong>    &mdash; load sample dataset
+<strong>tile</strong>      &mdash; retile windows to fit screen
+<strong>add</strong> &lt;dd&gt; &lt;dip&gt; [flags] &mdash; add measurement
+<strong>color</strong> [n] [#hex] &mdash; view/set palette
+<strong>rem</strong> &lt;text&gt;  &mdash; add comment to data
+<strong>new</strong>       &mdash; clear &amp; start fresh
+<strong>save</strong> &lt;name&gt; &mdash; save current project
+<strong>load</strong> [name|#] &mdash; load a saved project
+<strong>projects</strong>  &mdash; list saved projects
+<strong>cls</strong>       &mdash; clear console output
+<strong>about</strong>     &mdash; about this software</div>
+            <p style="margin-top:10px"><strong>Extended data format:</strong></p>
+            <div class="z-mono">dipdir dip [p|l] [g] [#RRGGBB]
+
+<strong>p</strong> / <strong>l</strong> &mdash; override type (plane/line)
+<strong>g</strong>     &mdash; plot great circle
+<strong>#RRGGBB</strong> &mdash; custom color
+
+Mix planes and lines freely, one per line.</div>
+            <p style="margin-top:10px"><strong>Hotkeys</strong> (when no input focused):</p>
+            <div class="z-mono"><strong>1</strong>&ndash;<strong>8</strong>    &mdash; select palette color
+<strong>c</strong>      &mdash; toggle contours
+<strong>g</strong>      &mdash; toggle great circles
+<strong>e</strong>      &mdash; export SVG
+<strong>r</strong>      &mdash; reset view
+<strong>p</strong> / <strong>l</strong>  &mdash; set type planes/lines
+<strong>&uarr;&darr;&larr;&rarr;</strong>  &mdash; nudge rotation (5&deg;)</div>
+            <p style="margin-top:6px"><strong>Mouse &amp; global:</strong></p>
+            <p>&bull; <strong>Ctrl+click</strong> &mdash; add plane at cursor.<br>
+            &bull; <strong>Ctrl+Shift+click</strong> &mdash; add line at cursor.<br>
+            &bull; <strong>Ctrl+Z</strong> &mdash; undo last added point.<br>
+            &bull; <strong>Ctrl+/</strong> &mdash; focus console.<br>
+            &bull; <strong>Ctrl+S</strong> &mdash; save project.<br>
+            &bull; Drag stereonet to rotate view.<br>
+            &bull; Right-click palette swatch to pick color.<br>
+            &bull; Last saved project auto-loads on startup.</p>
+            <div style="margin-top:8px">
+              <span class="sticker green" style="transform:rotate(1deg)">POWER USER MODE</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- PAGE 8: Fake Ads -->
+        <div class="z-page" data-p="7">
+          <div class="z-h2">Classifieds</div>
+          <div class="z-ad" style="border-width:3px">
+            <h3 style="font-size:22px;letter-spacing:4px">CLAR Compass Co.</h3>
+            <div class="z-tagline">&ldquo;Alles Clar?&rdquo;</div>
+            <p style="font-family:Georgia,serif;font-size:12px;color:#555;margin-top:4px">
+            The Original Geological Compass &mdash; Trusted Since 1954</p>
+            <div class="z-fine">Now in limited edition anodised titanium. Ask your local dealer.
+            Not responsible for lost bearing in the field.</div>
+          </div>
+          <div class="z-ad">
+            <h3>FIELD BOOTS UNLIMITED</h3>
+            <div class="z-tagline">&ldquo;Because That Scree Slope Won't Climb Itself&trade;&rdquo;</div>
+            <div class="z-fine">Now with 40% more ankle support. Available in Outcrop Brown and Flysch Grey.</div>
+          </div>
+          <div class="z-ad">
+            <h3>SCHMIDT GRAPH PAPER</h3>
+            <div class="z-tagline">Premium Equal-Area Nets &mdash; 100 Sheets</div>
+            <div class="z-fine">Now obsolete. Use bearing.js instead. We don't know why we still sell these.</div>
+            <span class="sticker pink" style="position:absolute;top:6px;right:6px;transform:rotate(8deg)">SALE</span>
+          </div>
+          <div style="text-align:center;margin-top:12px">
+            <span class="rubber-stamp stamp-blue" style="transform:rotate(-4deg)">ADVERTISEMENT</span>
+          </div>
+        </div>
+
+        <!-- PAGE 9: Letters to the Editor -->
+        <div class="z-page" data-p="8">
+          <div class="z-h2">Letters to the Editor</div>
+          <div class="z-letter">
+            Dear Editor, I've been using stereographic projection for 30 years and
+            I STILL don't understand why some people use equal-angle projection for
+            statistical work. What is WRONG with these people?
+            <div class="z-sig">&mdash; Prof. Dr. H.-W. M&uuml;ller, G&ouml;ttingen</div>
+          </div>
+          <div style="font-size:10px;color:#666;margin:-4px 0 8px 16px;font-family:Georgia,serif;font-style:italic">
+            Ed.: We agree, Herr Professor. We agree.</div>
+          <div class="z-letter">
+            Dear Editor, Please stop calling it a &ldquo;Schmidt net&rdquo;. Lambert had it first.
+            <div class="z-sig">&mdash; A. Lambert (no relation), Strasbourg</div>
+          </div>
+          <div class="z-letter">
+            Dear Editor, Your software crashed during my thesis defense. The committee
+            was not impressed. I blame the contour algorithm.
+            <div class="z-sig">&mdash; Anonymous PhD Candidate, Somewhere in Bavaria</div>
+          </div>
+          <div class="z-letter">
+            Dear Editor, I tried to explain to my spouse what I do for a living using
+            your stereonet software. They now think I'm some sort of abstract artist. I got
+            a gallery showing. Thank you?
+            <div class="z-sig">&mdash; Dr. R. Tectonic, Department of Confused Disciplines, ETH Z&uuml;rich</div>
+          </div>
+          <span class="sticker yellow center" style="transform:rotate(-2deg)">KEEP THE LETTERS COMING</span>
+        </div>
+
+        <!-- PAGE 10: About / Back Cover -->
+        <div class="z-page" data-p="9">
+          <div class="z-h2">About / Credits</div>
+          <div class="z-body">
+            <p><strong>bearing.js</strong> &mdash; Structural geology stereonet library in pure JavaScript.
+            No dependencies. Open source. Dangerously functional.</p>
+            <p>Implements: equal-area &amp; equal-angle projection, Fisher statistics,
+            principal axis analysis (orientation tensor, eigendecomposition), Woodcock &amp;
+            Vollmer fabric parameters, Bingham distribution, kernel-density contouring,
+            attitude I/O (dip-direction, strike, quadrant notation).</p>
+            <p>Made with equal parts science and stubbornness by the
+            <strong>Geoscientifical Chaos Union</strong>.</p>
+            <div style="text-align:center;margin:16px 0">
+              <span class="rubber-stamp stamp-blue" style="transform:rotate(-3deg);font-size:20px">GCU</span>
+            </div>
+            <p style="text-align:center;font-style:italic;color:#666">
+            &ldquo;Serious science. Questionable aesthetics.&rdquo;</p>
+            <div style="text-align:center;margin-top:20px;color:#aaa;font-size:10px">
+              Issue #2 coming... eventually.<br>
+              Printed on recycled field notebooks.<br>
+              Built with bearing.js and a generous amount of AI assistance.<br>
+              <br>
+              <span style="font-size:7px;letter-spacing:2px">BEARING SYSTEMS &mdash; BS-7700 &mdash; MADE ON EARTH</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="z-nav">
+        <button class="z-nav-btn" id="zine-prev" disabled>&#9664; PREV</button>
+        <span class="z-pagenum" id="zine-pagenum">1 / 10</span>
+        <button class="z-nav-btn" id="zine-next">NEXT &#9654;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Project Binder Overlay -->
+  <div id="project-overlay">
+    <div id="project-book">
+      <button class="pb-close" id="project-close">&times;</button>
+      <div class="pb-rings"><div class="pb-ring"></div><div class="pb-ring"></div><div class="pb-ring"></div><div class="pb-ring"></div><div class="pb-ring"></div><div class="pb-ring"></div></div>
+      <div class="pb-pages" id="project-pages"></div>
+      <div class="pb-nav">
+        <button class="pb-nav-btn" id="pb-prev" disabled>&#9664; PREV</button>
+        <span class="pb-pagenum" id="pb-pagenum">1 / 1</span>
+        <button class="pb-nav-btn" id="pb-next">NEXT &#9654;</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reference Overlay -->
+  <div id="ref-overlay">
+    <div id="ref-panel">
+      <button class="ref-close" id="ref-close">&times;</button>
+      <div class="ref-title">References</div>
+      <div class="ref-entry">
+        <div class="ref-authors">Schmidt, W. (1925)</div>
+        <div class="ref-atitle">Gef&uuml;gestatistik</div>
+        <div class="ref-journal">Mineralogische und Petrographische Mitteilungen, 38, 392&ndash;423.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Fisher, R.A. (1953)</div>
+        <div class="ref-atitle">Dispersion on a Sphere</div>
+        <div class="ref-journal">Proceedings of the Royal Society of London A, 217, 295&ndash;305.</div>
+        <div class="ref-doi"><a href="https://doi.org/10.1098/rspa.1953.0064" target="_blank">doi:10.1098/rspa.1953.0064</a></div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Kamb, W.B. (1959)</div>
+        <div class="ref-atitle">Ice Petrofabric Observations from Blue Glacier, Washington</div>
+        <div class="ref-journal">Journal of Geophysical Research, 64, 1891&ndash;1909.</div>
+        <div class="ref-doi"><a href="https://doi.org/10.1029/JZ064i011p01891" target="_blank">doi:10.1029/JZ064i011p01891</a></div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Bingham, C. (1974)</div>
+        <div class="ref-atitle">An Antipodally Symmetric Distribution on the Sphere</div>
+        <div class="ref-journal">Annals of Statistics, 2, 1201&ndash;1225.</div>
+        <div class="ref-doi"><a href="https://doi.org/10.1214/aos/1176342874" target="_blank">doi:10.1214/aos/1176342874</a></div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Woodcock, N.H. (1977)</div>
+        <div class="ref-atitle">Specification of Fabric Shapes Using an Eigenvalue Method</div>
+        <div class="ref-journal">Geological Society of America Bulletin, 88, 1231&ndash;1236.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Vollmer, F.W. (1990)</div>
+        <div class="ref-atitle">An Application of Eigenvalue Methods to Structural Domain Analysis</div>
+        <div class="ref-journal">Geological Society of America Bulletin, 102, 786&ndash;791.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Campanha, G.A.C.; Carneiro, C.D.R.; Pereira, G.G.A.; Furumoto, S.; Hasui, Y.; Nagata, N. (1996)</div>
+        <div class="ref-atitle">Uso do Programa Trade Para Determina&ccedil;&atilde;o de Dire&ccedil;&otilde;es Principais de Esfor&ccedil;os Pelos M&eacute;todos de Arthaud e Angelier</div>
+        <div class="ref-journal">In: Carneiro, C.D.R. (Org.). Proje&ccedil;&atilde;o estereogr&aacute;fica para an&aacute;lise de estruturas. S&atilde;o Paulo: UNICAMP/CPRM/IPT.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Yamamoto, J.K.; Souza, G.A.J.K.; Campanha, G.A.C. (1996)</div>
+        <div class="ref-atitle">Trade &mdash; Programa Para Tratamento de Dados Estruturais</div>
+        <div class="ref-journal">Software. S&atilde;o Paulo: UNICAMP/CPRM/IPT.</div>
+      </div>
+      <div class="ref-entry">
+        <div class="ref-authors">Grohmann, C.H. &amp; Campanha, G.A.C. (2010)</div>
+        <div class="ref-atitle">OpenStereo: Open Source, Cross-Platform Software for Structural Geology Analysis</div>
+        <div class="ref-journal">AGU Fall Meeting Abstracts, IN31C-06, San Francisco, CA.</div>
+        <div class="ref-doi"><a href="https://ui.adsabs.harvard.edu/abs/2010AGUFMIN31C..06G" target="_blank">ads:2010AGUFMIN31C..06G</a></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* __BUNDLE__ */
+</script>
+<script>
+(function() {
+  'use strict';
+
+  var Stereonet = bearing.Stereonet;
+  var io = bearing.io;
+  var statistics = bearing.statistics;
+  var conversions = bearing.conversions;
+  var mat3 = bearing.mat3;
+
+  // =========================================================================
+  //  STATE
+  // =========================================================================
+  var sn;
+  var currentDcos = [];
+  var currentPairs = [];
+  var showContours = false;
+  var zineOpen = false;
+  var zinePage = 0;
+  var ZINE_PAGES = 10;
+  var windowZ = 100;
+  var BAR_SEGS = 12;
+  var currentProject = null;
+  var projectBinderOpen = false;
+  var pbPage = 0;
+  var PB_PER_PAGE = 3;
+  var LAYOUT_KEY = 'bearing-os2-layout';
+  var PROJECTS_KEY = 'bearing-os2-projects';
+  var CURRENT_KEY = 'bearing-os2-current';
+  var PALETTE = ['#4ac8ff', '#ffaa44', '#ff5577', '#44dd88', '#cc77ff', '#ffcc33', '#ff8844', '#88cccc'];
+  var activeColor = 0;
+
+  // =========================================================================
+  //  SAMPLE DATA
+  // =========================================================================
+  var SAMPLE = [
+    '# Clustered bedding orientations',
+    '# Dip Direction / Dip',
+    '120 45', '125 42', '118 48', '115 50', '122 43',
+    '128 44', '116 46', '124 41', '119 47', '130 40',
+    '112 52', '126 44', '121 49', '117 51', '123 39',
+    '127 43', '114 53', '129 45', '120 42', '113 47',
+    '131 38', '125 46', '118 50', '122 44', '116 41',
+    '124 48', '128 43', '119 46', '126 42', '121 45',
+  ].join('\n');
+
+  // =========================================================================
+  //  DOM REFS
+  // =========================================================================
+  var $ = function(id) { return document.getElementById(id); };
+  var $boot = $('boot'), $desktop = $('desktop');
+  var $snMount = $('sn-mount');
+  var $dataText = $('data-text'), $dataType = $('data-type');
+  var $dataNotation = $('data-notation'), $dataCount = $('data-count');
+  var $showGC = $('show-gc'), $statsBody = $('stats-body');
+  var $consoleOut = $('console-out'), $consoleIn = $('console-in');
+
+  // =========================================================================
+  //  HELPERS
+  // =========================================================================
+  function fmt(n, d) { return Number(n).toFixed(d === undefined ? 1 : d); }
+  function fmtTP(dcos) {
+    var tp = conversions.dcosToLine(dcos);
+    return String(Math.round(tp[0])).padStart(3, '0') + '/' +
+           String(Math.round(tp[1])).padStart(2, '0');
+  }
+  function setLED(id, cls) {
+    var el = $('led-' + id);
+    el.className = 'led ' + (cls ? 'led-' + cls : 'led-off');
+  }
+
+  // =========================================================================
+  //  BOOT SEQUENCE
+  // =========================================================================
+  function boot() {
+    var lines = [
+      'BEARING SYSTEMS INC.',
+      'Model BS-7700 Stereonet Terminal',
+      'BIOS v3.14.159',
+      '',
+      'Memory check... 640K OK',
+      'Initializing projection engine... OK',
+      'Loading equal-area kernel... OK',
+      'Loading equal-angle kernel... OK',
+      'Calibrating orientation tensor... OK',
+      'Mounting /dev/stereonet0... OK',
+      '',
+      'Starting OS\u00B2 (OSOS) v1.0...',
+      'Copyright (c) 2025 Geoscientifical Chaos Union',
+      '',
+    ];
+    var i = 0, text = '';
+    function next() {
+      if (i < lines.length) {
+        text += lines[i] + '\n';
+        $boot.innerHTML = text + '<span class="boot-cursor"></span>';
+        i++;
+        setTimeout(next, 70 + Math.random() * 100);
+      } else {
+        setTimeout(function() {
+          $boot.classList.add('done');
+          $desktop.classList.add('visible');
+          initApp();
+        }, 500);
+      }
+    }
+    next();
+  }
+
+  // =========================================================================
+  //  WINDOW MANAGER
+  // =========================================================================
+  function initWindows() {
+    document.querySelectorAll('.window').forEach(function(w) {
+      w.addEventListener('mousedown', function() { windowZ++; w.style.zIndex = windowZ; });
+    });
+    // Drag
+    document.querySelectorAll('.win-tb').forEach(function(tb) {
+      tb.addEventListener('mousedown', function(e) {
+        if (e.target.classList.contains('win-btn')) return;
+        var w = tb.parentElement;
+        e.preventDefault();
+        windowZ++; w.style.zIndex = windowZ;
+        var rect = w.getBoundingClientRect();
+        var ox = e.clientX - rect.left, oy = e.clientY - rect.top;
+        var dr = $desktop.getBoundingClientRect();
+        function mv(e2) {
+          w.style.left = Math.max(0, Math.min(e2.clientX - dr.left - ox, dr.width - 60)) + 'px';
+          w.style.top = Math.max(0, Math.min(e2.clientY - dr.top - oy, dr.height - 60)) + 'px';
+        }
+        function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); saveLayout(); }
+        window.addEventListener('mousemove', mv);
+        window.addEventListener('mouseup', up);
+      });
+    });
+    // Resize
+    document.querySelectorAll('.win-resize').forEach(function(handle) {
+      handle.addEventListener('mousedown', function(e) {
+        var w = handle.closest('.window');
+        e.preventDefault(); e.stopPropagation();
+        windowZ++; w.style.zIndex = windowZ;
+        var startX = e.clientX, startY = e.clientY;
+        var startW = w.offsetWidth, startH = w.offsetHeight;
+        var minW = parseInt(w.dataset.minW) || 200;
+        var minH = parseInt(w.dataset.minH) || 120;
+        var lockAR = w.id === 'win-sn';
+        var ar = lockAR ? startW / startH : 0;
+        function mv(e2) {
+          var newW = Math.max(minW, startW + e2.clientX - startX);
+          var newH = Math.max(minH, startH + e2.clientY - startY);
+          if (lockAR) {
+            // Use whichever axis moved more to drive the other
+            var dxAbs = Math.abs(e2.clientX - startX);
+            var dyAbs = Math.abs(e2.clientY - startY);
+            if (dxAbs >= dyAbs) { newH = Math.max(minH, Math.round(newW / ar)); }
+            else { newW = Math.max(minW, Math.round(newH * ar)); }
+          }
+          w.style.width = newW + 'px';
+          w.style.height = newH + 'px';
+        }
+        function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); saveLayout(); }
+        window.addEventListener('mousemove', mv);
+        window.addEventListener('mouseup', up);
+      });
+    });
+    // Minimize
+    document.querySelectorAll('.win-min').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        btn.closest('.window').classList.toggle('minimized');
+        updateTaskbar(); saveLayout();
+      });
+    });
+    document.querySelectorAll('.tb-app[data-win]').forEach(function(tb) {
+      tb.addEventListener('click', function() {
+        var w = $(tb.dataset.win);
+        if (w.classList.contains('minimized')) {
+          w.classList.remove('minimized');
+          windowZ++; w.style.zIndex = windowZ;
+        } else {
+          w.classList.add('minimized');
+        }
+        updateTaskbar(); saveLayout();
+      });
+    });
+  }
+  function updateTaskbar() {
+    document.querySelectorAll('.tb-app[data-win]').forEach(function(tb) {
+      tb.classList.toggle('active', !$(tb.dataset.win).classList.contains('minimized'));
+    });
+  }
+
+  // =========================================================================
+  //  STEREONET
+  // =========================================================================
+  function initStereonet() {
+    sn = new Stereonet({ size: 480 });
+    $snMount.appendChild(sn.element());
+    setupDragRotate();
+    setupClickToAdd();
+    setupMouseReadout();
+  }
+
+  function setupDragRotate() {
+    var el = sn.element();
+    var dragging = false, lastX, lastY, moved;
+
+    el.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      dragging = true; moved = false;
+      lastX = e.clientX; lastY = e.clientY;
+      e.preventDefault();
+    });
+    window.addEventListener('mousemove', function(e) {
+      if (!dragging) return;
+      var dx = e.clientX - lastX, dy = e.clientY - lastY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      lastX = e.clientX; lastY = e.clientY;
+      var s = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
+      var delta = mat3.multiply(Rx, Ry);
+      sn.setRotation(sn.rotation ? mat3.multiply(delta, sn.rotation) : delta);
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render();
+      updateViewDisplay();
+    });
+    window.addEventListener('mouseup', function() { dragging = false; });
+    el._dragMoved = function() { return moved; };
+  }
+
+  function appendData(line) {
+    var cur = $dataText.value.trim();
+    $dataText.value = cur ? cur + '\n' + line : line;
+    $dataText.scrollTop = $dataText.scrollHeight;
+    plotData(true);
+  }
+
+  function setupClickToAdd() {
+    var el = sn.element();
+    el.addEventListener('click', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (el._dragMoved && el._dragMoved()) return;
+      var dcos = screenToDcos(e);
+      if (!dcos) return;
+
+      var type, a1, a2;
+      if (e.shiftKey) {
+        // Line: cursor IS the line direction (trend/plunge)
+        var tp = conversions.dcosToLine(dcos);
+        a1 = Math.round(tp[0]); a2 = Math.round(tp[1]);
+        type = 'l';
+      } else {
+        // Plane: cursor is the pole, get dd/dip
+        var dd = conversions.dcosToPlane(dcos);
+        a1 = Math.round(dd[0]); a2 = Math.round(dd[1]);
+        type = 'p';
+      }
+
+      var line = a1 + ' ' + a2 + ' ' + type + ' ' + PALETTE[activeColor];
+      appendData(line);
+    });
+
+    // Crosshair cursor when Ctrl is held
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Control' || e.key === 'Meta') el.style.cursor = 'crosshair';
+    });
+    document.addEventListener('keyup', function(e) {
+      if (e.key === 'Control' || e.key === 'Meta') el.style.cursor = '';
+    });
+  }
+
+  function initPalette() {
+    var swatches = document.querySelectorAll('.pal-swatch');
+    swatches.forEach(function(sw) {
+      var idx = parseInt(sw.dataset.pal);
+      sw.style.background = PALETTE[idx];
+      sw.addEventListener('click', function() {
+        activeColor = idx;
+        swatches.forEach(function(s) { s.classList.remove('active'); });
+        sw.classList.add('active');
+      });
+      sw.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        var picker = $('color-picker-hidden');
+        picker.value = PALETTE[idx];
+        picker._palIdx = idx;
+        picker.click();
+      });
+    });
+    $('color-picker-hidden').addEventListener('input', function() {
+      var idx = this._palIdx;
+      PALETTE[idx] = this.value;
+      var sw = document.querySelector('.pal-swatch[data-pal="' + idx + '"]');
+      if (sw) sw.style.background = this.value;
+    });
+  }
+
+  function setupMouseReadout() {
+    var el = sn.element();
+    el.addEventListener('mousemove', function(e) {
+      var dcos = screenToDcos(e);
+      if (!dcos) {
+        $('sn-cur-val').textContent = '---/--';
+        $('sn-pole-val').textContent = '---/--';
+        $('tb-cursor').textContent = '---/--';
+        return;
+      }
+      var tp = conversions.dcosToLine(dcos);
+      var dd = conversions.dcosToPlane(dcos);
+      var curStr = String(Math.round(tp[0])).padStart(3, '0') + '/' +
+                   String(Math.round(tp[1])).padStart(2, '0');
+      var poleStr = String(Math.round(dd[0])).padStart(3, '0') + '/' +
+                    String(Math.round(dd[1])).padStart(2, '0');
+      $('sn-cur-val').textContent = curStr;
+      $('sn-pole-val').textContent = poleStr;
+      $('tb-cursor').textContent = curStr;
+    });
+    el.addEventListener('mouseleave', function() {
+      $('sn-cur-val').textContent = '---/--';
+      $('sn-pole-val').textContent = '---/--';
+      $('tb-cursor').textContent = '---/--';
+    });
+  }
+
+  // Inverse projection: screen coords -> direction cosines (or null if outside net)
+  function screenToDcos(e) {
+    var el = sn.element();
+    var rect = el.getBoundingClientRect();
+    var scale = sn.size / rect.width;
+    var x = (e.clientX - rect.left) * scale, y = (e.clientY - rect.top) * scale;
+    var cx = sn.size / 2, r = sn._radius;
+    var dx = x - cx, dy = -(y - cx);
+    if (Math.sqrt(dx * dx + dy * dy) > r) return null;
+
+    var pr = sn.projection === 'equal-angle' ? 1 : Math.SQRT2;
+    var sc = r / pr, px = dx / sc, py = dy / sc, r2 = px * px + py * py;
+    var z, s2, prl, dcos;
+    if (sn.projection === 'equal-area') {
+      z = -(1 - r2 / 2); s2 = Math.sqrt(Math.max(0, 1 - z * z));
+      prl = Math.sqrt(r2) || 1; dcos = [px / prl * s2, py / prl * s2, z];
+    } else {
+      z = -(1 - r2) / (1 + r2); s2 = Math.sqrt(Math.max(0, 1 - z * z));
+      prl = Math.sqrt(r2) || 1; dcos = [px / prl * s2, py / prl * s2, z];
+    }
+    if (sn.rotation) dcos = mat3.transformVec3(mat3.transpose(sn.rotation), dcos);
+    return dcos;
+  }
+
+  function updateViewDisplay() {
+    if (!sn) return;
+    var viewStr = '000/90';
+    if (sn.rotation) {
+      var Rt = mat3.transpose(sn.rotation);
+      var center = mat3.transformVec3(Rt, [0, 0, -1]);
+      var plunge = Math.asin(Math.min(1, Math.max(-1, -center[2]))) * 180 / Math.PI;
+      var trend = ((Math.atan2(center[0], center[1]) * 180 / Math.PI) + 360) % 360;
+      viewStr = String(Math.round(trend)).padStart(3, '0') + '/' +
+                String(Math.round(plunge)).padStart(2, '0');
+    }
+    $('sn-view-val').textContent = viewStr;
+  }
+
+  // =========================================================================
+  //  DATA — Extended format: dipdir dip [p|l] [g] [#RRGGBB]
+  // =========================================================================
+  var DEFAULT_PLANE_COLOR = '#4ac8ff';
+  var DEFAULT_LINE_COLOR = '#ffaa44';
+  var DEFAULT_GC_OPACITY = 0.25;
+
+  /**
+   * Parse a single data line with optional extended flags.
+   * Format: direction dip [p|l] [g] [#RRGGBB]
+   * Returns null for unparseable/comment/blank lines.
+   */
+  function parseExtendedLine(raw, defaultType, isStrike) {
+    var line = raw.trim();
+    if (!line || line.startsWith('#')) return null;
+
+    var tokens = line.split(/[\/,\s\t]+/).filter(Boolean);
+    if (tokens.length < 2) return null;
+
+    // Extract flags from end, working backwards
+    var type = defaultType;
+    var gc = false;
+    var color = null;
+    var extra = [];
+
+    for (var i = 2; i < tokens.length; i++) {
+      var tok = tokens[i].toLowerCase();
+      if (tok === 'p') type = 'planes';
+      else if (tok === 'l') type = 'lines';
+      else if (tok === 'g') gc = true;
+      else if (tokens[i].charAt(0) === '#' && /^#[0-9a-fA-F]{6}$/.test(tokens[i])) color = tokens[i];
+      else extra.push(tokens[i]);
+    }
+
+    // Parse the orientation (first two tokens + any leftover non-flag tokens)
+    var dirStr = tokens[0], dipStr = tokens[1];
+    var direction, dipVal, quadrant;
+    try {
+      direction = io.parseDirection(dirStr);
+      var pd = io.parseDip(dipStr);
+      dipVal = pd.dip; quadrant = pd.quadrant;
+    } catch(e) { return null; }
+
+    var dcos, pair;
+    if (type === 'planes') {
+      var att = io.translateAttitude(direction, dipVal, quadrant, isStrike);
+      dcos = conversions.planeToDcos(att[0], att[1]);
+      pair = [att[0], att[1]];
+    } else {
+      dcos = conversions.lineToDcos(direction, dipVal);
+      pair = [direction, dipVal];
+    }
+
+    return { type: type, dcos: dcos, pair: pair, gc: gc, color: color };
+  }
+
+  function plotData(quiet) {
+    var text = $dataText.value.trim();
+    if (!text) return;
+    sn.clear(); sn.clearContours();
+    currentDcos = []; currentPairs = [];
+    setLED('err', 'off'); setLED('proc', 'amber');
+
+    try {
+      var defaultType = $dataType.value;
+      var isStrike = $dataNotation.value === 'strike';
+      var globalGC = $showGC.checked;
+      var lines = text.split(/\r?\n/);
+      var nPlanes = 0, nLines = 0;
+
+      for (var i = 0; i < lines.length; i++) {
+        var entry = parseExtendedLine(lines[i], defaultType, isStrike);
+        if (!entry) continue;
+
+        currentDcos.push(entry.dcos);
+        currentPairs.push(entry.pair);
+
+        if (entry.type === 'planes') {
+          var poleColor = entry.color || DEFAULT_PLANE_COLOR;
+          sn.pole(entry.pair[0], entry.pair[1], { fill: poleColor, r: 3 });
+          if (entry.gc || globalGC) {
+            var gcAlpha = DEFAULT_GC_OPACITY;
+            var gcColor = entry.color
+              ? hexToRgba(entry.color, gcAlpha)
+              : 'rgba(74,200,255,' + gcAlpha + ')';
+            sn.plane(entry.pair[0], entry.pair[1], { stroke: gcColor, strokeWidth: 0.8 });
+          }
+          nPlanes++;
+        } else {
+          var lineColor = entry.color || DEFAULT_LINE_COLOR;
+          sn.line(entry.pair[0], entry.pair[1], { fill: lineColor, r: 3.5 });
+          if (entry.gc) {
+            var gcAlpha2 = DEFAULT_GC_OPACITY;
+            var gcColor2 = entry.color
+              ? hexToRgba(entry.color, gcAlpha2)
+              : 'rgba(255,170,68,' + gcAlpha2 + ')';
+            var normDD = entry.pair[0];
+            var normDip = 90 - entry.pair[1];
+            sn.plane(normDD, normDip, { stroke: gcColor2, strokeWidth: 0.8 });
+          }
+          nLines++;
+        }
+      }
+
+      if (currentDcos.length === 0) { setLED('err', 'red'); if (!quiet) conLog('Error: no valid data parsed.'); }
+      else {
+        setLED('data', 'green');
+        if (!quiet) {
+          var msg = 'Plotted ' + currentDcos.length;
+          if (nPlanes > 0 && nLines > 0) msg += ' (' + nPlanes + ' planes, ' + nLines + ' lines)';
+          else msg += ' ' + (nPlanes > 0 ? 'planes' : 'lines');
+          msg += '.';
+          conLog(msg);
+        }
+      }
+      if (showContours && currentDcos.length >= 3) applyContours();
+      sn.render(); updateStats();
+      $dataCount.textContent = 'n = ' + currentDcos.length;
+    } catch (err) {
+      setLED('err', 'red'); conLog('Parse error: ' + err.message);
+    }
+    setLED('proc', 'off');
+  }
+
+  function hexToRgba(hex, alpha) {
+    var r = parseInt(hex.slice(1, 3), 16);
+    var g = parseInt(hex.slice(3, 5), 16);
+    var b = parseInt(hex.slice(5, 7), 16);
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + alpha + ')';
+  }
+
+  function loadSample() {
+    $dataText.value = SAMPLE;
+    $dataType.value = 'planes'; $dataNotation.value = 'dip-direction';
+    plotData();
+  }
+  function clearData() {
+    sn.clear(); sn.clearContours();
+    currentDcos = []; currentPairs = [];
+    showContours = false;
+    $('btn-contour').classList.remove('on');
+    sn.render(); updateStats();
+    $dataCount.textContent = 'n = 0';
+    setLED('data', 'off'); setLED('proc', 'off'); setLED('err', 'off'); setLED('exp', 'off');
+  }
+  function newWorkspace() {
+    clearData();
+    $dataText.value = '';
+    $dataType.value = 'planes';
+    $dataNotation.value = 'dip-direction';
+    $dataNotation.style.display = '';
+    $showGC.checked = false;
+    $showGC.parentElement.style.display = '';
+    sn.setRotation(null);
+    sn.projection = 'equal-area';
+    sn.net = 'equatorial';
+    document.querySelectorAll('#sw-proj .sw-opt').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.val === 'equal-area');
+    });
+    document.querySelectorAll('#sw-net .sw-opt').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.val === 'equatorial');
+    });
+    sn.render(); updateViewDisplay();
+    currentProject = null;
+    try { localStorage.removeItem(CURRENT_KEY); } catch(e) {}
+    updateTaskbarProject();
+  }
+  function applyContours() {
+    sn.clearContours();
+    if (currentDcos.length >= 3)
+      sn.contour(currentDcos, {
+        levels: [2, 4, 6, 8, 10],
+        colors: ['#1a3a4a', '#2a6a7a', '#3a9aaa', '#4ac8e8', '#7af0ff'],
+        gridSize: 45, strokeWidth: 1.0,
+      });
+  }
+  function toggleContour() {
+    showContours = !showContours;
+    $('btn-contour').classList.toggle('on', showContours);
+    if (showContours && currentDcos.length >= 3) { setLED('proc', 'amber'); applyContours(); setLED('proc', 'off'); }
+    else sn.clearContours();
+    sn.render();
+  }
+  function exportSVG() {
+    sn.download('stereonet.svg');
+    setLED('exp', 'blue'); conLog('SVG exported.');
+    setTimeout(function() { setLED('exp', 'off'); }, 2000);
+  }
+  function resetView() {
+    sn.setRotation(null);
+    if (showContours && currentDcos.length >= 3) sn.updateContours();
+    sn.render(); updateViewDisplay();
+  }
+
+  // =========================================================================
+  //  STATISTICS (instrument-style)
+  // =========================================================================
+  function updateStats() {
+    var n = currentDcos.length;
+    // Update taskbar
+    $('tb-n').textContent = n;
+    $('tb-kappa').textContent = '--';
+
+    if (n < 2) {
+      $statsBody.innerHTML = '<div class="stats-empty">Load \u2265 2 measurements.</div>';
+      return;
+    }
+
+    var f = statistics.fisherStats(currentDcos);
+    var pa = statistics.principalAxes(currentDcos);
+    var h = '';
+
+    // Taskbar kappa
+    $('tb-kappa').textContent = isFinite(f.kappa) ? fmt(f.kappa) : '\u221e';
+
+    // Fisher section with digital readout boxes
+    h += '<div class="st-section"><div class="st-head">Fisher</div>';
+    h += '<div class="st-digi-row">';
+    h += digi('n', String(f.n).padStart(4, '0'), true);
+    h += digi('\u03ba', isFinite(f.kappa) ? fmt(f.kappa) : '\u221e', false);
+    h += digi('\u03b1\u2089\u2085', fmt(f.alpha95) + '\u00b0', false);
+    h += digi('R\u0304', fmt(f.Rbar, 3), false);
+    h += '</div>';
+    h += sr('R', fmt(f.R));
+    h += sr('Mean', fmtTP(f.mean));
+    h += '</div>';
+
+    // Eigenvalues with LED bars
+    h += '<div class="st-section"><div class="st-head">Eigenvalues</div>';
+    for (var i = 0; i < 3; i++) {
+      var label = 'S' + '\u2081\u2082\u2083'[i];
+      var val = pa.eigenvalues[i];
+      var dir = fmtTP(pa.eigenvectors[i]);
+      h += bar(label, val, 1, fmt(val, 3), dir);
+    }
+    h += '</div>';
+
+    // Woodcock + Vollmer side by side
+    h += '<div class="st-section"><div class="st-cols">';
+    h += '<div><div class="st-head">Woodcock</div>';
+    h += sr('K', fmt(pa.K, 2) + (pa.K > 1 ? ' clst' : pa.K < 1 ? ' grdl' : ''));
+    h += sr('C', fmt(pa.C, 2));
+    h += '</div>';
+    h += '<div><div class="st-head">Vollmer</div>';
+    h += bar('P', pa.P, 1, fmt(pa.P, 3), '');
+    h += bar('G', pa.G, 1, fmt(pa.G, 3), '');
+    h += bar('R', pa.R, 1, fmt(pa.R, 3), '');
+    var dominant = pa.P >= pa.G && pa.P >= pa.R ? 'cluster' :
+                   pa.G >= pa.P && pa.G >= pa.R ? 'girdle' : 'random';
+    h += '<div class="st-fabric-label">' + dominant + '</div>';
+    h += '</div>';
+    h += '</div></div>';
+
+    // Bingham
+    h += '<div class="st-section"><div class="st-head">Bingham</div>';
+    h += sr('\u03ba\u2081', fmt(pa.kappa1, 1));
+    h += sr('\u03ba\u2082', fmt(pa.kappa2, 1));
+    h += '</div>';
+
+    $statsBody.innerHTML = h;
+  }
+
+  function digi(label, value, warm) {
+    return '<div class="st-digi"><span class="st-digi-lbl">' + label +
+           '</span><span class="st-digi-val' + (warm ? ' warm' : '') + '">' +
+           value + '</span></div>';
+  }
+
+  function sr(l, v) {
+    return '<div class="st-row"><span class="st-lbl">' + l +
+           '</span><span class="st-val">' + v + '</span></div>';
+  }
+
+  function bar(label, value, max, valText, dirText) {
+    var frac = Math.min(1, Math.max(0, value / max));
+    var n = Math.round(frac * BAR_SEGS);
+    var h = '<div class="st-bar"><span class="st-bar-lbl">' + label + '</span>';
+    h += '<div class="st-bar-track">';
+    for (var i = 0; i < BAR_SEGS; i++) {
+      var cls = 'st-bar-seg';
+      if (i < n) {
+        if (i < BAR_SEGS * 0.6) cls += ' g';
+        else if (i < BAR_SEGS * 0.85) cls += ' y';
+        else cls += ' r';
+      }
+      h += '<div class="' + cls + '"></div>';
+    }
+    h += '</div><span class="st-bar-val">' + valText + '</span>';
+    if (dirText) h += '<span class="st-bar-dir">' + dirText + '</span>';
+    h += '</div>';
+    return h;
+  }
+
+  // =========================================================================
+  //  LAYOUT
+  // =========================================================================
+
+  function defaultLayout() {
+    var crt = $('crt');
+    var w = crt.clientWidth, h = crt.clientHeight - 28;
+    var gap = 8, pad = 4;
+    // Stereonet chrome: titlebar 24 + body padding 10 + readout 20 + tools 26 = ~80
+    var snChrome = 80;
+    // Left column: stereonet (square SVG) + console
+    // Size stereonet so SVG fits: width ≈ height - chrome
+    var snH = Math.round(h * 0.7);
+    var snW = snH - snChrome;
+    // Clamp left column to ~40% of width
+    if (snW > Math.round(w * 0.4)) {
+      snW = Math.round(w * 0.4);
+      snH = snW + snChrome;
+    }
+    snW = Math.max(300, snW);
+    snH = Math.max(350, snH);
+    var conH = Math.max(100, h - snH - gap);
+    // Right two columns: data + stats, split evenly
+    var rightStart = snW + gap + pad;
+    var rightTotal = w - rightStart - pad;
+    var dataW = Math.max(250, Math.round(rightTotal * 0.5) - Math.round(gap / 2));
+    var statsW = Math.max(250, rightTotal - dataW - gap);
+    var statsLeft = rightStart + dataW + gap;
+    setWinRect('win-sn', pad, pad, snW, snH);
+    setWinRect('win-con', pad, snH + gap + pad, snW, conH);
+    setWinRect('win-data', rightStart, pad, dataW, h);
+    setWinRect('win-stats', statsLeft, pad, statsW, h);
+  }
+
+  function setWinRect(id, left, top, width, height) {
+    var el = $(id);
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.style.width = width + 'px';
+    el.style.height = height + 'px';
+  }
+
+  // =========================================================================
+  //  LAYOUT PERSISTENCE
+  // =========================================================================
+  function saveLayout() {
+    var layout = {};
+    document.querySelectorAll('.window').forEach(function(w) {
+      layout[w.id] = {
+        left: w.style.left, top: w.style.top,
+        width: w.style.width, height: w.style.height,
+        minimized: w.classList.contains('minimized')
+      };
+    });
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch(e) {}
+  }
+
+  function restoreLayout() {
+    try {
+      var raw = localStorage.getItem(LAYOUT_KEY);
+      if (!raw) { defaultLayout(); return; }
+      var layout = JSON.parse(raw);
+      var crt = $('crt');
+      var maxW = crt.clientWidth, maxH = crt.clientHeight - 28;
+      document.querySelectorAll('.window').forEach(function(w) {
+        var s = layout[w.id];
+        if (!s) return;
+        var l = parseInt(s.left) || 0, t = parseInt(s.top) || 0;
+        var ww = parseInt(s.width) || 300, wh = parseInt(s.height) || 200;
+        w.style.left = Math.max(0, Math.min(l, maxW - 60)) + 'px';
+        w.style.top = Math.max(0, Math.min(t, maxH - 40)) + 'px';
+        w.style.width = Math.min(ww, maxW) + 'px';
+        w.style.height = Math.min(wh, maxH) + 'px';
+        if (s.minimized) w.classList.add('minimized');
+        else w.classList.remove('minimized');
+      });
+      updateTaskbar();
+    } catch(e) { defaultLayout(); }
+  }
+
+  // =========================================================================
+  //  PROJECT SYSTEM
+  // =========================================================================
+  function getProjects() {
+    try { return JSON.parse(localStorage.getItem(PROJECTS_KEY)) || []; }
+    catch(e) { return []; }
+  }
+  function saveProjects(projects) {
+    try { localStorage.setItem(PROJECTS_KEY, JSON.stringify(projects)); } catch(e) {}
+  }
+
+  function saveProject(name) {
+    if (!name || !name.trim()) { conLog('Usage: save <name>'); return; }
+    name = name.trim();
+    var projects = getProjects();
+    var state = {
+      dataText: $dataText.value,
+      dataType: $dataType.value,
+      notation: $dataNotation.value,
+      showGC: $showGC.checked,
+      showContours: showContours,
+      projection: document.querySelector('#sw-proj .sw-opt.active').dataset.val,
+      net: document.querySelector('#sw-net .sw-opt.active').dataset.val,
+      rotation: sn.rotation || null
+    };
+    var now = new Date().toISOString();
+    var existing = projects.findIndex(function(p) { return p.name === name; });
+    if (existing >= 0) {
+      projects[existing].modified = now;
+      projects[existing].state = state;
+    } else {
+      projects.push({ name: name, created: now, modified: now, comment: '', state: state });
+    }
+    saveProjects(projects);
+    currentProject = name;
+    try { localStorage.setItem(CURRENT_KEY, name); } catch(e) {}
+    updateTaskbarProject();
+    conLog('Project saved: ' + name);
+  }
+
+  function loadProject(project) {
+    var s = project.state;
+    $dataText.value = s.dataText || '';
+    $dataType.value = s.dataType || 'planes';
+    $dataNotation.value = s.notation || 'dip-direction';
+    $showGC.checked = !!s.showGC;
+    showContours = !!s.showContours;
+    $('btn-contour').classList.toggle('on', showContours);
+    // Set switches
+    document.querySelectorAll('#sw-proj .sw-opt').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.val === (s.projection || 'equal-area'));
+    });
+    sn.projection = s.projection || 'equal-area';
+    document.querySelectorAll('#sw-net .sw-opt').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.val === (s.net || 'equatorial'));
+    });
+    sn.net = s.net || 'equatorial';
+    // Set rotation
+    if (s.rotation) sn.setRotation(s.rotation);
+    else sn.setRotation(null);
+    // Plot
+    plotData();
+    currentProject = project.name;
+    try { localStorage.setItem(CURRENT_KEY, project.name); } catch(e) {}
+    updateTaskbarProject();
+    conLog('Project loaded: ' + project.name);
+  }
+
+  function loadProjectByNameOrIndex(arg) {
+    var projects = getProjects();
+    if (projects.length === 0) { conLog('No saved projects.'); return; }
+    if (!arg) {
+      conLog('Projects:');
+      projects.forEach(function(p, i) { conLog('  ' + (i + 1) + '. ' + p.name); });
+      conLog('Usage: load <name|number>');
+      return;
+    }
+    var idx = parseInt(arg);
+    var project;
+    if (!isNaN(idx) && idx >= 1 && idx <= projects.length) {
+      project = projects[idx - 1];
+    } else {
+      project = projects.find(function(p) { return p.name.toLowerCase() === arg.toLowerCase(); });
+    }
+    if (!project) { conLog('Project not found: ' + arg); return; }
+    loadProject(project);
+  }
+
+  function listProjects() {
+    var projects = getProjects();
+    if (projects.length === 0) return 'No saved projects.';
+    var lines = ['Saved projects:'];
+    projects.forEach(function(p, i) {
+      var mod = new Date(p.modified).toLocaleDateString();
+      lines.push('  ' + (i + 1) + '. ' + p.name + ' (' + mod + ')');
+    });
+    return lines.join('\n');
+  }
+
+  function updateTaskbarProject() {
+    var el = $('tb-project');
+    var nameEl = $('tb-project-name');
+    if (currentProject) {
+      el.style.display = '';
+      nameEl.textContent = currentProject;
+    } else {
+      el.style.display = 'none';
+      nameEl.textContent = '';
+    }
+  }
+
+  // =========================================================================
+  //  PROJECT BINDER UI
+  // =========================================================================
+  function openProjectBinder() {
+    projectBinderOpen = true;
+    pbPage = 0;
+    renderProjectPages();
+    $('project-overlay').classList.add('open');
+  }
+
+  function closeProjectBinder() {
+    projectBinderOpen = false;
+    $('project-overlay').classList.remove('open');
+  }
+
+  function renderProjectPages() {
+    var projects = getProjects();
+    var container = $('project-pages');
+    var totalPages = Math.max(1, Math.ceil(projects.length / PB_PER_PAGE));
+    if (pbPage >= totalPages) pbPage = totalPages - 1;
+    var start = pbPage * PB_PER_PAGE;
+    var pageProjects = projects.slice(start, start + PB_PER_PAGE);
+
+    var h = '<div class="pb-title">Project Binder</div>';
+    if (projects.length === 0) {
+      h += '<div class="pb-empty">No saved projects yet.<br>Use the console: save &lt;name&gt;</div>';
+    } else {
+      pageProjects.forEach(function(p, i) {
+        var globalIdx = start + i;
+        var created = new Date(p.created).toLocaleDateString();
+        var modified = new Date(p.modified).toLocaleDateString();
+        h += '<div class="pb-project">';
+        h += '<div class="pb-floppy"><div class="pb-floppy-slider"></div>';
+        h += '<div class="pb-floppy-label">' + escHtml(p.name) + '</div>';
+        h += '<div class="pb-floppy-notch"></div></div>';
+        h += '<div class="pb-info">';
+        h += '<div class="pb-name">' + escHtml(p.name) + '</div>';
+        h += '<div class="pb-dates">Created: ' + created + ' &middot; Modified: ' + modified + '</div>';
+        h += '<div class="pb-comment"><textarea data-idx="' + globalIdx + '" placeholder="Add a comment...">' + escHtml(p.comment || '') + '</textarea></div>';
+        h += '<div class="pb-actions">';
+        h += '<button class="pb-btn-load" data-idx="' + globalIdx + '">LOAD</button>';
+        h += '<button class="pb-btn-delete" data-idx="' + globalIdx + '">DELETE</button>';
+        h += '</div></div></div>';
+      });
+    }
+    container.innerHTML = h;
+
+    // Wire up buttons
+    container.querySelectorAll('.pb-btn-load').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(btn.dataset.idx);
+        var prj = getProjects()[idx];
+        if (prj) { loadProject(prj); closeProjectBinder(); }
+      });
+    });
+    container.querySelectorAll('.pb-btn-delete').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var idx = parseInt(btn.dataset.idx);
+        var projects = getProjects();
+        if (idx >= 0 && idx < projects.length) {
+          var name = projects[idx].name;
+          projects.splice(idx, 1);
+          saveProjects(projects);
+          if (currentProject === name) ejectFloppy();
+          conLog('Deleted project: ' + name);
+          renderProjectPages();
+        }
+      });
+    });
+    container.querySelectorAll('.pb-comment textarea').forEach(function(ta) {
+      ta.addEventListener('blur', function() {
+        var idx = parseInt(ta.dataset.idx);
+        var projects = getProjects();
+        if (idx >= 0 && idx < projects.length) {
+          projects[idx].comment = ta.value;
+          saveProjects(projects);
+        }
+      });
+    });
+
+    $('pb-prev').disabled = pbPage === 0;
+    $('pb-next').disabled = pbPage >= totalPages - 1;
+    $('pb-pagenum').textContent = (pbPage + 1) + ' / ' + totalPages;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function initProjectBinder() {
+    $('tab-projects').addEventListener('click', openProjectBinder);
+    $('project-close').addEventListener('click', closeProjectBinder);
+    $('project-overlay').addEventListener('click', function(e) {
+      if (e.target === $('project-overlay')) closeProjectBinder();
+    });
+    $('pb-prev').addEventListener('click', function() { if (pbPage > 0) { pbPage--; renderProjectPages(); } });
+    $('pb-next').addEventListener('click', function() { pbPage++; renderProjectPages(); });
+  }
+
+  // =========================================================================
+  //  REFERENCE PANEL
+  // =========================================================================
+  function initReferences() {
+    $('tab-refs').addEventListener('click', function() {
+      $('ref-overlay').classList.add('open');
+    });
+    $('ref-close').addEventListener('click', function() {
+      $('ref-overlay').classList.remove('open');
+    });
+    $('ref-overlay').addEventListener('click', function(e) {
+      if (e.target === $('ref-overlay')) $('ref-overlay').classList.remove('open');
+    });
+  }
+
+  // =========================================================================
+  //  CONSOLE
+  // =========================================================================
+  function initConsole() {
+    conLog('OS\u00B2 Console v1.0');
+    conLog("Type 'help' for available commands.\n");
+    $('win-con').addEventListener('click', function(e) {
+      if (!e.target.closest('.win-btn')) $consoleIn.focus();
+    });
+    $consoleIn.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        var input = $consoleIn.value.trim();
+        $consoleIn.value = '';
+        if (!input) return;
+        conLog('> ' + input);
+        var r = execCmd(input);
+        if (r) conLog(r);
+      }
+    });
+  }
+  function conLog(t) {
+    var d = document.createElement('div');
+    d.textContent = t; $consoleOut.appendChild(d);
+    $consoleOut.scrollTop = $consoleOut.scrollHeight;
+  }
+  function execCmd(input) {
+    var p = input.split(/\s+/), cmd = p[0].toLowerCase(), args = p.slice(1);
+    switch (cmd) {
+      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  new, save <name>, load [name|#], projects,\n  cls, about';
+      case 'plot': plotData(); return '';
+      case 'clear': clearData(); return 'Data cleared.';
+      case 'stats': return getStatsText();
+      case 'contour': toggleContour(); return 'Contours ' + (showContours ? 'ON' : 'OFF') + '.';
+      case 'export': exportSVG(); return '';
+      case 'rotate':
+        if (args.length < 2) return 'Usage: rotate <trend> <plunge>';
+        var t = parseFloat(args[0]), pl = parseFloat(args[1]);
+        if (isNaN(t) || isNaN(pl)) return 'Invalid numbers.';
+        sn.setCenter(t, pl);
+        if (showContours && currentDcos.length >= 3) sn.updateContours();
+        sn.render(); updateViewDisplay();
+        return 'View: ' + Math.round(t) + '/' + Math.round(pl);
+      case 'reset': resetView(); return 'View reset.';
+      case 'sample': loadSample(); return '';
+      case 'cls': $consoleOut.innerHTML = ''; return '';
+      case 'about': return 'OS\u00B2 \u2014 OpenStereoOperatingSystem v1.0\nbearing.js stereonet library\nGeoscientifical Chaos Union\n"Serious science. Questionable aesthetics."';
+      case 'new': newWorkspace(); return 'New workspace.';
+      case 'save': saveProject(args.join(' ')); return '';
+      case 'load': loadProjectByNameOrIndex(args.join(' ')); return '';
+      case 'projects': return listProjects();
+      case 'tile': defaultLayout(); saveLayout(); return 'Windows tiled.';
+      case 'add':
+        if (args.length < 2) return 'Usage: add <dd> <dip> [p|l] [g] [#color]';
+        appendData(args.join(' '));
+        return '';
+      case 'color':
+        if (args.length === 0) {
+          var out = 'Palette:';
+          for (var ci = 0; ci < PALETTE.length; ci++)
+            out += '\n  ' + (ci + 1) + ': ' + PALETTE[ci] + (ci === activeColor ? ' *' : '');
+          return out;
+        }
+        var cn = parseInt(args[0]);
+        if (isNaN(cn) || cn < 1 || cn > PALETTE.length) return 'Color 1-' + PALETTE.length + '.';
+        if (args[1] && /^#[0-9a-fA-F]{6}$/.test(args[1])) {
+          PALETTE[cn - 1] = args[1];
+          var csw = document.querySelector('.pal-swatch[data-pal="' + (cn - 1) + '"]');
+          if (csw) csw.style.background = args[1];
+          activeColor = cn - 1;
+          document.querySelectorAll('.pal-swatch').forEach(function(s) { s.classList.remove('active'); });
+          if (csw) csw.classList.add('active');
+          return 'Color ' + cn + ' set to ' + args[1] + '.';
+        }
+        activeColor = cn - 1;
+        document.querySelectorAll('.pal-swatch').forEach(function(s) { s.classList.remove('active'); });
+        var asw = document.querySelector('.pal-swatch[data-pal="' + (cn - 1) + '"]');
+        if (asw) asw.classList.add('active');
+        return 'Active color: ' + cn + ' (' + PALETTE[cn - 1] + ').';
+      case 'rem':
+        if (args.length === 0) return 'Usage: rem <comment>';
+        appendData('# ' + args.join(' '));
+        return '';
+      default: return 'Unknown: ' + cmd;
+    }
+  }
+  function getStatsText() {
+    if (currentDcos.length < 2) return 'Not enough data (n < 2).';
+    var f = statistics.fisherStats(currentDcos), pa = statistics.principalAxes(currentDcos);
+    return 'n=' + f.n + ' R=' + fmt(f.R) + ' Rbar=' + fmt(f.Rbar, 3) +
+      '\n\u03ba=' + fmt(f.kappa) + ' \u03b1\u2089\u2085=' + fmt(f.alpha95) + '\u00b0' +
+      '\nMean: ' + fmtTP(f.mean) +
+      '\nS: ' + fmt(pa.eigenvalues[0], 3) + ' ' + fmt(pa.eigenvalues[1], 3) + ' ' + fmt(pa.eigenvalues[2], 3) +
+      '\nK=' + fmt(pa.K, 2) + ' C=' + fmt(pa.C, 2) +
+      '\nP=' + fmt(pa.P, 3) + ' G=' + fmt(pa.G, 3) + ' R=' + fmt(pa.R, 3);
+  }
+
+  // =========================================================================
+  //  HARDWARE SWITCHES (bezel)
+  // =========================================================================
+  function initSwitches() {
+    document.querySelectorAll('#sw-proj .sw-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#sw-proj .sw-opt').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        sn.projection = btn.dataset.val;
+        if (showContours && currentDcos.length >= 3) sn._computeContours();
+        sn.render(); conLog('Projection: ' + btn.dataset.val);
+      });
+    });
+    document.querySelectorAll('#sw-net .sw-opt').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('#sw-net .sw-opt').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        sn.net = btn.dataset.val;
+        sn.render(); conLog('Net: ' + btn.dataset.val);
+      });
+    });
+  }
+
+  // =========================================================================
+  //  ZINE
+  // =========================================================================
+  function initZine() {
+    $('tab-manual').addEventListener('click', function() {
+      zineOpen = !zineOpen;
+      $('zine-overlay').classList.toggle('open', zineOpen);
+    });
+    $('zine-close').addEventListener('click', function() {
+      zineOpen = false;
+      $('zine-overlay').classList.remove('open');
+    });
+    $('zine-overlay').addEventListener('click', function(e) {
+      if (e.target === $('zine-overlay')) {
+        zineOpen = false;
+        $('zine-overlay').classList.remove('open');
+      }
+    });
+    $('zine-prev').addEventListener('click', function() { gotoZinePage(zinePage - 1); });
+    $('zine-next').addEventListener('click', function() { gotoZinePage(zinePage + 1); });
+    document.addEventListener('keydown', function(e) {
+      if (!zineOpen) return;
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') gotoZinePage(zinePage - 1);
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') gotoZinePage(zinePage + 1);
+      if (e.key === 'Escape') { zineOpen = false; $('zine-overlay').classList.remove('open'); }
+    });
+    // Render a real stereonet illustration for the zine
+    var zSn = new Stereonet({ size: 240 });
+    zSn.plane(120, 45, { stroke: '#000', strokeWidth: 1.5 });
+    zSn.plane(40, 70, { stroke: '#555', strokeWidth: 1 });
+    zSn.pole(120, 45, { fill: '#000', r: 4 });
+    zSn.pole(40, 70, { fill: '#555', r: 3.5 });
+    $('zine-sn-mount').innerHTML = zSn.svg();
+  }
+  function gotoZinePage(n) {
+    if (n < 0 || n >= ZINE_PAGES) return;
+    var pages = document.querySelectorAll('.z-page');
+    pages[zinePage].classList.remove('active');
+    pages[zinePage].classList.add('exit-left');
+    var prev = zinePage;
+    zinePage = n;
+    pages[zinePage].classList.remove('exit-left');
+    pages[zinePage].classList.add('active');
+    setTimeout(function() { pages[prev].classList.remove('exit-left'); }, 350);
+    $('zine-prev').disabled = zinePage === 0;
+    $('zine-next').disabled = zinePage === ZINE_PAGES - 1;
+    $('zine-pagenum').textContent = (zinePage + 1) + ' / ' + ZINE_PAGES;
+  }
+
+  // =========================================================================
+  //  BUTTONS
+  // =========================================================================
+  function initButtons() {
+    $('btn-contour').addEventListener('click', toggleContour);
+    $('btn-clear').addEventListener('click', clearData);
+    $('btn-export').addEventListener('click', exportSVG);
+    $('btn-reset').addEventListener('click', resetView);
+    $('btn-plot').addEventListener('click', plotData);
+    $('btn-sample').addEventListener('click', loadSample);
+    $('btn-save').addEventListener('click', function() {
+      if (currentProject) { saveProject(currentProject); }
+      else {
+        var name = prompt('Project name:');
+        if (name) saveProject(name);
+      }
+    });
+    $showGC.addEventListener('change', function() { if (currentDcos.length > 0) plotData(); });
+    $dataType.addEventListener('change', function() {
+      $dataNotation.style.display = $dataType.value === 'lines' ? 'none' : '';
+      $showGC.parentElement.style.display = $dataType.value === 'lines' ? 'none' : '';
+    });
+    // Global shortcuts (Ctrl+key)
+    document.addEventListener('keydown', function(e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (currentProject) saveProject(currentProject);
+        else {
+          var name = prompt('Project name:');
+          if (name) saveProject(name);
+        }
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault();
+        $consoleIn.focus();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+        var tag0 = document.activeElement && document.activeElement.tagName;
+        if (tag0 === 'INPUT' || tag0 === 'TEXTAREA' || tag0 === 'SELECT') return;
+        e.preventDefault();
+        var lines = $dataText.value.split(/\r?\n/);
+        while (lines.length && !lines[lines.length - 1].trim()) lines.pop();
+        if (lines.length) {
+          lines.pop();
+          $dataText.value = lines.join('\n');
+          if (lines.length) plotData(true); else clearData();
+        }
+        return;
+      }
+
+      // Stereonet hotkeys — only when no input is focused
+      var tag = document.activeElement && document.activeElement.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      var NUDGE = 5 * Math.PI / 180;
+      switch (e.key) {
+        case 'c': toggleContour(); break;
+        case 'g':
+          $showGC.checked = !$showGC.checked;
+          if (currentDcos.length > 0) plotData();
+          break;
+        case 'e': exportSVG(); break;
+        case 'r': resetView(); break;
+        case 'p':
+          $dataType.value = 'planes';
+          $dataType.dispatchEvent(new Event('change'));
+          conLog('Type: planes');
+          break;
+        case 'l':
+          $dataType.value = 'lines';
+          $dataType.dispatchEvent(new Event('change'));
+          conLog('Type: lines');
+          break;
+        case '1': case '2': case '3': case '4':
+        case '5': case '6': case '7': case '8':
+          var ci = parseInt(e.key) - 1;
+          activeColor = ci;
+          document.querySelectorAll('.pal-swatch').forEach(function(s) { s.classList.remove('active'); });
+          var sw = document.querySelector('.pal-swatch[data-pal="' + ci + '"]');
+          if (sw) sw.classList.add('active');
+          break;
+        case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown':
+          e.preventDefault();
+          var dx = (e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0) * NUDGE;
+          var dy = (e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0) * NUDGE;
+          var Ry = dx ? mat3.rotationFromAxisAngle([0, 1, 0], dx) : null;
+          var Rx = dy ? mat3.rotationFromAxisAngle([1, 0, 0], dy) : null;
+          var delta = Ry && Rx ? mat3.multiply(Rx, Ry) : (Ry || Rx);
+          sn.setRotation(sn.rotation ? mat3.multiply(delta, sn.rotation) : delta);
+          if (showContours && currentDcos.length >= 3) sn.updateContours();
+          sn.render(); updateViewDisplay();
+          break;
+        default: return;
+      }
+    });
+  }
+
+  // =========================================================================
+  //  CLOCK
+  // =========================================================================
+  function tick() {
+    var d = new Date();
+    $('tb-clock').textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+
+  // =========================================================================
+  //  INIT
+  // =========================================================================
+  function initApp() {
+    initStereonet();
+    initWindows();
+    restoreLayout();
+    initConsole();
+    initSwitches();
+    initButtons();
+    initPalette();
+    initZine();
+    initProjectBinder();
+    initReferences();
+    updateStats();
+    updateViewDisplay();
+    tick(); setInterval(tick, 30000);
+    // Auto-load last saved project
+    try {
+      var lastProjName = localStorage.getItem(CURRENT_KEY);
+      if (lastProjName) {
+        var projects = getProjects();
+        var proj = projects.find(function(p) { return p.name === lastProjName; });
+        if (proj) loadProject(proj);
+      }
+    } catch(e) {}
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

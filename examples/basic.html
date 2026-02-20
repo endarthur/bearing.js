@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bearing.js — Stereonet Demo</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #333;
+    }
+    h1 { margin-bottom: 0.5rem; }
+    h2 { margin-top: 2rem; }
+    .row {
+      display: flex;
+      gap: 2rem;
+      flex-wrap: wrap;
+      margin-bottom: 1.5rem;
+    }
+    .plot {
+      text-align: center;
+    }
+    .plot h3 { margin: 0.5rem 0; }
+  </style>
+</head>
+<body>
+  <h1>bearing.js</h1>
+  <p>Structural geology stereonet plots — equatorial &amp; polar nets, equal-area &amp; equal-angle projections.</p>
+
+  <div class="row">
+    <div class="plot">
+      <h3>Equal-Area / Equatorial</h3>
+      <div id="ea-eq"></div>
+    </div>
+    <div class="plot">
+      <h3>Equal-Angle / Equatorial</h3>
+      <div id="ea-ang-eq"></div>
+    </div>
+  </div>
+  <div class="row">
+    <div class="plot">
+      <h3>Equal-Area / Polar</h3>
+      <div id="ea-pol"></div>
+    </div>
+    <div class="plot">
+      <h3>Equal-Angle / Polar</h3>
+      <div id="ea-ang-pol"></div>
+    </div>
+  </div>
+
+  <h2>Oblique Stereonets</h2>
+  <p>Arbitrary rotation via <code>center: [trend, plunge]</code> — the grid and data are projected relative to the specified orientation.</p>
+
+  <div class="row">
+    <div class="plot">
+      <h3>Center: 045/30</h3>
+      <div id="oblique-1"></div>
+    </div>
+    <div class="plot">
+      <h3>Center: 180/60</h3>
+      <div id="oblique-2"></div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { Stereonet } from '../src/index.js';
+
+    const bedding = [
+      [120, 45], [125, 42], [118, 48], [130, 40], [115, 50],
+      [122, 43], [128, 47], [110, 38], [135, 52], [119, 44],
+    ];
+
+    const lineations = [
+      [30, 15], [35, 12], [25, 18], [40, 10], [28, 20],
+    ];
+
+    // Standard nets
+    const configs = [
+      { id: 'ea-eq',      projection: 'equal-area',  net: 'equatorial' },
+      { id: 'ea-ang-eq',  projection: 'equal-angle', net: 'equatorial' },
+      { id: 'ea-pol',     projection: 'equal-area',  net: 'polar' },
+      { id: 'ea-ang-pol', projection: 'equal-angle', net: 'polar' },
+    ];
+
+    for (const { id, projection, net } of configs) {
+      const sn = new Stereonet({ size: 400, projection, net });
+
+      for (const [dd, dip] of bedding) {
+        sn.plane(dd, dip, { stroke: 'steelblue', strokeWidth: 0.8 });
+        sn.pole(dd, dip, { fill: 'steelblue', r: 3 });
+      }
+
+      for (const [trend, plunge] of lineations) {
+        sn.line(trend, plunge, { fill: 'crimson', r: 4 });
+      }
+
+      sn.cone(32, 15, 10, { stroke: 'crimson', strokeWidth: 1 });
+
+      document.getElementById(id).appendChild(sn.element());
+    }
+
+    // Oblique nets
+    const obliqueConfigs = [
+      { id: 'oblique-1', center: [45, 30] },
+      { id: 'oblique-2', center: [180, 60] },
+    ];
+
+    for (const { id, center } of obliqueConfigs) {
+      const sn = new Stereonet({ size: 400, center });
+
+      for (const [dd, dip] of bedding) {
+        sn.plane(dd, dip, { stroke: 'steelblue', strokeWidth: 0.8 });
+        sn.pole(dd, dip, { fill: 'steelblue', r: 3 });
+      }
+
+      for (const [trend, plunge] of lineations) {
+        sn.line(trend, plunge, { fill: 'crimson', r: 4 });
+      }
+
+      sn.cone(32, 15, 10, { stroke: 'crimson', strokeWidth: 1 });
+
+      document.getElementById(id).appendChild(sn.element());
+    }
+  </script>
+</body>
+</html>

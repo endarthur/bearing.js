@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>bearing.js — Interactive Demo</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #333;
+    }
+    h1 { margin-bottom: 0.5rem; }
+    #plot { text-align: center; cursor: grab; }
+    #plot:active { cursor: grabbing; }
+    .controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+    }
+    .controls label { font-size: 0.9rem; }
+    .controls input[type=range] { width: 160px; }
+    .info { font-size: 0.85rem; color: #666; }
+    button {
+      padding: 0.3rem 0.8rem;
+      border: 1px solid #999;
+      border-radius: 4px;
+      background: #f5f5f5;
+      cursor: pointer;
+    }
+    button:hover { background: #e8e8e8; }
+  </style>
+</head>
+<body>
+  <h1>bearing.js — Interactive</h1>
+  <p>Drag to rotate the net. Click to add poles.</p>
+
+  <div id="plot"></div>
+
+  <div class="controls">
+    <label>Trend: <input type="range" id="trend" min="0" max="360" value="0">
+      <span id="trend-val">0</span>°</label>
+    <label>Plunge: <input type="range" id="plunge" min="0" max="90" value="90">
+      <span id="plunge-val">90</span>°</label>
+    <button id="reset-view">Reset view</button>
+    <button id="clear-data">Clear data</button>
+  </div>
+  <p class="info" id="info">Center: straight down (standard view)</p>
+
+  <script>
+/* __BUNDLE__ */
+  </script>
+  <script>
+    const { Stereonet, mat3 } = bearing;
+
+    const sn = new Stereonet({ size: 500 });
+    const el = sn.element();
+    document.getElementById('plot').appendChild(el);
+
+    const trendSlider = document.getElementById('trend');
+    const plungeSlider = document.getElementById('plunge');
+    const trendVal = document.getElementById('trend-val');
+    const plungeVal = document.getElementById('plunge-val');
+    const info = document.getElementById('info');
+
+    // Slider-driven rotation
+    function updateFromSliders() {
+      const t = +trendSlider.value;
+      const p = +plungeSlider.value;
+      trendVal.textContent = t;
+      plungeVal.textContent = p;
+      sn.setCenter(t, p);
+      sn.render();
+      info.textContent = p === 90
+        ? 'Center: straight down (standard view)'
+        : 'Center: ' + String(t).padStart(3, '0') + '/' + String(p).padStart(2, '0');
+    }
+
+    trendSlider.addEventListener('input', updateFromSliders);
+    plungeSlider.addEventListener('input', updateFromSliders);
+
+    document.getElementById('reset-view').addEventListener('click', function() {
+      trendSlider.value = 0;
+      plungeSlider.value = 90;
+      sn.setRotation(null);
+      sn.render();
+      trendVal.textContent = '0';
+      plungeVal.textContent = '90';
+      info.textContent = 'Center: straight down (standard view)';
+    });
+
+    document.getElementById('clear-data').addEventListener('click', function() {
+      sn.clear().render();
+    });
+
+    // Click to add poles
+    el.addEventListener('click', function(e) {
+      const rect = el.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const cx = sn.size / 2;
+      const r = sn._radius;
+      const dx = x - cx;
+      const dy = -(y - cx);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > r) return;
+
+      var projRadius = sn.projection === 'equal-angle' ? 1 : Math.SQRT2;
+      var scale = r / projRadius;
+      var px = dx / scale;
+      var py = dy / scale;
+      var r2 = px * px + py * py;
+      var dcos;
+      if (sn.projection === 'equal-area') {
+        var z = -(1 - r2 / 2);
+        var s = Math.sqrt(Math.max(0, 1 - z * z));
+        var pr = Math.sqrt(r2) || 1;
+        dcos = [px / pr * s, py / pr * s, z];
+      } else {
+        var z = -(1 - r2) / (1 + r2);
+        var s = Math.sqrt(Math.max(0, 1 - z * z));
+        var pr = Math.sqrt(r2) || 1;
+        dcos = [px / pr * s, py / pr * s, z];
+      }
+
+      if (sn.rotation) {
+        var Rt = mat3.transpose(sn.rotation);
+        dcos = mat3.transformVec3(Rt, dcos);
+      }
+
+      var dipR = Math.acos(Math.min(1, Math.max(-1, -dcos[2])));
+      var ddR = Math.atan2(-dcos[0], -dcos[1]);
+      var dip = dipR * 180 / Math.PI;
+      var dd = ((ddR * 180 / Math.PI) + 360) % 360;
+
+      sn.pole(dd, dip, {
+        fill: 'hsl(' + Math.random() * 360 + ', 70%, 50%)',
+        r: 4,
+      });
+      sn.render();
+    });
+
+    // Drag to rotate
+    var dragging = false;
+    var lastX, lastY;
+
+    el.addEventListener('mousedown', function(e) {
+      if (e.button !== 0) return;
+      dragging = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function(e) {
+      if (!dragging) return;
+      var dx = e.clientX - lastX;
+      var dy = e.clientY - lastY;
+      lastX = e.clientX;
+      lastY = e.clientY;
+
+      var sensitivity = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * sensitivity);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * sensitivity);
+      var delta = mat3.multiply(Rx, Ry);
+
+      sn.setRotation(
+        sn.rotation ? mat3.multiply(delta, sn.rotation) : delta
+      );
+      sn.render();
+
+      var Rt = mat3.transpose(sn.rotation);
+      var center = mat3.transformVec3(Rt, [0, 0, -1]);
+      var plunge = Math.asin(Math.min(1, Math.max(-1, -center[2]))) * 180 / Math.PI;
+      var trend = ((Math.atan2(center[0], center[1]) * 180 / Math.PI) + 360) % 360;
+      trendSlider.value = Math.round(trend);
+      plungeSlider.value = Math.round(plunge);
+      trendVal.textContent = Math.round(trend);
+      plungeVal.textContent = Math.round(plunge);
+      info.textContent = 'Center: ' + String(Math.round(trend)).padStart(3, '0') + '/' + String(Math.round(plunge)).padStart(2, '0');
+    });
+
+    window.addEventListener('mouseup', function() { dragging = false; });
+  </script>
+</body>
+</html>

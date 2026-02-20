@@ -1,0 +1,5 @@
+node_modules/
+.claude/
+examples/standalone.html
+examples/interactive_standalone.html
+examples/analysis_standalone.html
