@@ -1,5 +1,5 @@
 import { buildSync } from 'esbuild';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 
 // Bundle the library into a single IIFE exposing `bearing` global
 const { outputFiles } = buildSync({
@@ -26,3 +26,45 @@ for (const [src, dest] of templates) {
   writeFileSync(dest, html);
   console.log(`Built ${dest}`);
 }
+
+// --- npm dist bundles ---
+mkdirSync('dist', { recursive: true });
+
+// IIFE (for <script> tags, CDN)
+buildSync({
+  entryPoints: ['src/index.js'],
+  bundle: true,
+  format: 'iife',
+  globalName: 'bearing',
+  outfile: 'dist/bearing.js',
+});
+console.log('Built dist/bearing.js (IIFE)');
+
+// IIFE minified
+buildSync({
+  entryPoints: ['src/index.js'],
+  bundle: true,
+  format: 'iife',
+  globalName: 'bearing',
+  minify: true,
+  outfile: 'dist/bearing.min.js',
+});
+console.log('Built dist/bearing.min.js (IIFE minified)');
+
+// CJS (for require())
+buildSync({
+  entryPoints: ['src/index.js'],
+  bundle: true,
+  format: 'cjs',
+  outfile: 'dist/bearing.cjs',
+});
+console.log('Built dist/bearing.cjs (CommonJS)');
+
+// ESM bundle (single file, for CDNs like esm.sh that prefer pre-bundled)
+buildSync({
+  entryPoints: ['src/index.js'],
+  bundle: true,
+  format: 'esm',
+  outfile: 'dist/bearing.mjs',
+});
+console.log('Built dist/bearing.mjs (ESM bundle)');

@@ -1,4 +1,5 @@
 node_modules/
+dist/
 .claude/
 examples/standalone.html
 examples/interactive_standalone.html
