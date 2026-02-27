@@ -1565,6 +1565,7 @@ var bearing = (() => {
     generateNet: () => generateNet,
     io: () => io_exports,
     mat3: () => mat3_exports,
+    mergeStyles: () => deepMerge,
     statistics: () => statistics_exports,
     styleDefaults: () => defaults,
     symmetricEigen3: () => symmetricEigen3,
@@ -2091,6 +2092,43 @@ var bearing = (() => {
   };
 
   // src/render/style.js
+  function deepMerge(target, ...sources) {
+    const result = { ...target };
+    for (const source of sources) {
+      if (!source) continue;
+      for (const key of Object.keys(source)) {
+        if (source[key] === void 0) continue;
+        if (source[key] !== null && typeof source[key] === "object" && !Array.isArray(source[key]) && result[key] !== null && typeof result[key] === "object" && !Array.isArray(result[key])) {
+          result[key] = deepMerge(result[key], source[key]);
+        } else {
+          result[key] = source[key];
+        }
+      }
+    }
+    return result;
+  }
+  function resolveStyle(category, instanceStyle, itemStyle) {
+    const base = defaults[category];
+    if (typeof base === "object" && base !== null) {
+      const result = { ...base };
+      const inst2 = instanceStyle?.[category];
+      if (inst2 && typeof inst2 === "object") {
+        for (const [k, v] of Object.entries(inst2)) {
+          if (v !== void 0) result[k] = v;
+        }
+      }
+      if (itemStyle && typeof itemStyle === "object") {
+        for (const [k, v] of Object.entries(itemStyle)) {
+          if (v !== void 0) result[k] = v;
+        }
+      }
+      return result;
+    }
+    if (itemStyle !== void 0) return itemStyle;
+    const inst = instanceStyle?.[category];
+    if (inst !== void 0) return inst;
+    return base;
+  }
   var defaults = {
     size: 500,
     padding: 30,
@@ -2362,16 +2400,20 @@ var bearing = (() => {
       this.projection = options.projection || "equal-area";
       this.net = options.net || "equatorial";
       this.rotation = options.rotation ?? (options.center ? _Stereonet.rotationFromCenter(options.center[0], options.center[1]) : options.northPole ? _Stereonet.rotationFromNorthPole(options.northPole[0], options.northPole[1], options.northPole[2] || 0) : null);
+      this._instanceStyle = options.style || null;
+      this._classPrefix = options.classPrefix !== void 0 ? options.classPrefix : "bearing";
       this._items = [];
       this._clipId = `bearing-clip-${nextClipId++}`;
       this._contourDcos = null;
       this._contourOptions = null;
       this._contourPaths = null;
       this._el = null;
+      this._bgEl = null;
       this._gcPath = null;
       this._scPath = null;
       this._contourGroup = null;
       this._dataGroup = null;
+      this._primEl = null;
       this._cardinalEls = null;
     }
     /**
@@ -2439,6 +2481,25 @@ var bearing = (() => {
       const c = this._center;
       const s = this._scale;
       return [c + px * s, c - py * s];
+    }
+    /** Resolve style for a category using the three-level cascade. */
+    _resolveCategory(category, itemStyle) {
+      return resolveStyle(category, this._instanceStyle, itemStyle);
+    }
+    /** Build CSS class string for an SVG element. Returns undefined if classes disabled. */
+    _classFor(suffix, extraClass) {
+      if (this._classPrefix === null) return void 0;
+      const base = `${this._classPrefix}-${suffix}`;
+      return extraClass ? `${base} ${extraClass}` : base;
+    }
+    /**
+     * Update the instance-level style at runtime. Call render() to apply.
+     * @param {Object} style - instance style overrides
+     * @returns {this}
+     */
+    setStyle(style) {
+      this._instanceStyle = style;
+      return this;
     }
     /** Rotate a 3D point by the stereonet's rotation matrix. */
     _rotate(p) {
@@ -2582,16 +2643,22 @@ var bearing = (() => {
       const svg = new SvgBuilder(this.size, this.size);
       const c = this._center;
       const r = this._radius;
-      svg.circle(c, c, r, { fill: defaults.background, stroke: "none" });
+      svg.circle(c, c, r, {
+        fill: this._resolveCategory("background"),
+        stroke: "none",
+        class: this._classFor("background")
+      });
       svg.clipCircle(this._clipId, c, c, r);
       svg.openClipGroup(this._clipId);
+      const gridStyle = this._resolveCategory("grid");
       const { greatCircles, smallCircles } = generateNet(10, this.net);
       for (const gc of greatCircles) {
         for (const seg of this._projectCurve(gc)) {
           if (seg.length > 1) {
             svg.polyline(seg, {
-              stroke: defaults.grid.stroke,
-              "stroke-width": defaults.grid.strokeWidth
+              stroke: gridStyle.stroke,
+              "stroke-width": gridStyle.strokeWidth,
+              class: this._classFor("grid")
             });
           }
         }
@@ -2600,8 +2667,9 @@ var bearing = (() => {
         for (const seg of this._projectCurve(sc)) {
           if (seg.length > 1) {
             svg.polyline(seg, {
-              stroke: defaults.grid.stroke,
-              "stroke-width": defaults.grid.strokeWidth
+              stroke: gridStyle.stroke,
+              "stroke-width": gridStyle.strokeWidth,
+              class: this._classFor("grid")
             });
           }
         }
@@ -2613,22 +2681,26 @@ var bearing = (() => {
         this._renderItemString(svg, item);
       }
       svg.closeGroup();
+      const primStyle = this._resolveCategory("primitive");
       svg.circle(c, c, r, {
         fill: "none",
-        stroke: defaults.primitive.stroke,
-        "stroke-width": defaults.primitive.strokeWidth
+        stroke: primStyle.stroke,
+        "stroke-width": primStyle.strokeWidth,
+        class: this._classFor("primitive")
       });
       this._renderCardinalsString(svg, c, r);
       return svg.toString();
     }
     _renderCardinalsString(svg, cx, r) {
-      const offset = defaults.cardinals.offset;
+      const cardStyle = this._resolveCategory("cardinals");
+      const offset = cardStyle.offset;
       const style = {
-        "font-size": defaults.cardinals.fontSize,
-        "font-family": defaults.cardinals.fontFamily,
-        fill: defaults.cardinals.fill,
+        "font-size": cardStyle.fontSize,
+        "font-family": cardStyle.fontFamily,
+        fill: cardStyle.fill,
         "text-anchor": "middle",
-        "dominant-baseline": "central"
+        "dominant-baseline": "central",
+        class: this._classFor("cardinal")
       };
       const directions = [
         { label: "N", dcos: [0, 1, 0] },
@@ -2653,6 +2725,7 @@ var bearing = (() => {
       const defaultStroke = opts.stroke || "#333";
       const defaultWidth = opts.strokeWidth || 0.8;
       const colors = opts.colors;
+      const cls = this._classFor("contour");
       for (let k = 0; k < this._contourPaths.length; k++) {
         const { paths } = this._contourPaths[k];
         const stroke = colors && colors[k] ? colors[k] : defaultStroke;
@@ -2662,7 +2735,8 @@ var bearing = (() => {
             svg.polyline(svgPts, {
               stroke,
               "stroke-width": defaultWidth,
-              fill: "none"
+              fill: "none",
+              class: cls
             });
           }
         }
@@ -2675,9 +2749,11 @@ var bearing = (() => {
           const d = this._rotate(dcos);
           const [px, py] = this._projectFn(d);
           const [sx, sy] = this._toSvg(px, py);
-          svg.circle(sx, sy, item.style.r || defaults.pole.r, {
-            fill: item.style.fill || defaults.pole.fill,
-            stroke: item.style.stroke || defaults.pole.stroke
+          const s = this._resolveCategory("pole", item.style);
+          svg.circle(sx, sy, s.r, {
+            fill: s.fill,
+            stroke: s.stroke,
+            class: this._classFor("pole", item.style.class)
           });
           break;
         }
@@ -2686,21 +2762,25 @@ var bearing = (() => {
           const d = this._rotate(dcos);
           const [px, py] = this._projectFn(d);
           const [sx, sy] = this._toSvg(px, py);
-          svg.circle(sx, sy, item.style.r || defaults.line.r, {
-            fill: item.style.fill || defaults.line.fill,
-            stroke: item.style.stroke || defaults.line.stroke
+          const s = this._resolveCategory("line", item.style);
+          svg.circle(sx, sy, s.r, {
+            fill: s.fill,
+            stroke: s.stroke,
+            class: this._classFor("line", item.style.class)
           });
           break;
         }
         case "plane": {
           const pole = planeToDcos(item.dd, item.dip);
           const pts3d = greatCircle(pole, 180);
+          const s = this._resolveCategory("plane", item.style);
           for (const seg of this._projectCurve(pts3d)) {
             if (seg.length > 1) {
               svg.polyline(seg, {
-                stroke: item.style.stroke || defaults.plane.stroke,
-                "stroke-width": item.style.strokeWidth || defaults.plane.strokeWidth,
-                fill: "none"
+                stroke: s.stroke,
+                "stroke-width": s.strokeWidth,
+                fill: "none",
+                class: this._classFor("plane", item.style.class)
               });
             }
           }
@@ -2710,13 +2790,15 @@ var bearing = (() => {
           const axis = lineToDcos(item.trend, item.plunge);
           const halfAngle = item.halfAngle * DEG3;
           const pts3d = smallCircle(axis, halfAngle, 180);
+          const s = this._resolveCategory("cone", item.style);
           for (const seg of this._projectCurve(pts3d)) {
             if (seg.length > 1) {
               svg.polyline(seg, {
-                stroke: item.style.stroke || defaults.cone.stroke,
-                "stroke-width": item.style.strokeWidth || defaults.cone.strokeWidth,
+                stroke: s.stroke,
+                "stroke-width": s.strokeWidth,
                 fill: "none",
-                "stroke-dasharray": item.style.strokeDasharray || defaults.cone.strokeDasharray
+                "stroke-dasharray": s.strokeDasharray,
+                class: this._classFor("cone", item.style.class)
               });
             }
           }
@@ -2749,9 +2831,16 @@ var bearing = (() => {
       svg.setAttribute("width", s);
       svg.setAttribute("height", s);
       svg.setAttribute("viewBox", `0 0 ${s} ${s}`);
-      const bg = document.createElementNS(SVG_NS, "circle");
-      setAttrs(bg, { cx: c, cy: c, r, fill: defaults.background, stroke: "none" });
-      svg.appendChild(bg);
+      this._bgEl = document.createElementNS(SVG_NS, "circle");
+      setAttrs(this._bgEl, {
+        cx: c,
+        cy: c,
+        r,
+        fill: this._resolveCategory("background"),
+        stroke: "none",
+        class: this._classFor("background")
+      });
+      svg.appendChild(this._bgEl);
       const defs = document.createElementNS(SVG_NS, "defs");
       const clipPath = document.createElementNS(SVG_NS, "clipPath");
       clipPath.setAttribute("id", this._clipId);
@@ -2762,18 +2851,21 @@ var bearing = (() => {
       svg.appendChild(defs);
       const clipGroup = document.createElementNS(SVG_NS, "g");
       clipGroup.setAttribute("clip-path", `url(#${this._clipId})`);
+      const gridStyle = this._resolveCategory("grid");
       this._gcPath = document.createElementNS(SVG_NS, "path");
       setAttrs(this._gcPath, {
-        stroke: defaults.grid.stroke,
-        "stroke-width": defaults.grid.strokeWidth,
-        fill: "none"
+        stroke: gridStyle.stroke,
+        "stroke-width": gridStyle.strokeWidth,
+        fill: "none",
+        class: this._classFor("grid")
       });
       clipGroup.appendChild(this._gcPath);
       this._scPath = document.createElementNS(SVG_NS, "path");
       setAttrs(this._scPath, {
-        stroke: defaults.grid.stroke,
-        "stroke-width": defaults.grid.strokeWidth,
-        fill: "none"
+        stroke: gridStyle.stroke,
+        "stroke-width": gridStyle.strokeWidth,
+        fill: "none",
+        class: this._classFor("grid")
       });
       clipGroup.appendChild(this._scPath);
       this._contourGroup = document.createElementNS(SVG_NS, "g");
@@ -2781,25 +2873,29 @@ var bearing = (() => {
       this._dataGroup = document.createElementNS(SVG_NS, "g");
       clipGroup.appendChild(this._dataGroup);
       svg.appendChild(clipGroup);
-      const prim = document.createElementNS(SVG_NS, "circle");
-      setAttrs(prim, {
+      const primStyle = this._resolveCategory("primitive");
+      this._primEl = document.createElementNS(SVG_NS, "circle");
+      setAttrs(this._primEl, {
         cx: c,
         cy: c,
         r,
         fill: "none",
-        stroke: defaults.primitive.stroke,
-        "stroke-width": defaults.primitive.strokeWidth
+        stroke: primStyle.stroke,
+        "stroke-width": primStyle.strokeWidth,
+        class: this._classFor("primitive")
       });
-      svg.appendChild(prim);
+      svg.appendChild(this._primEl);
+      const cardStyle = this._resolveCategory("cardinals");
       this._cardinalEls = [];
       for (const label of ["N", "E", "S", "W"]) {
         const text = document.createElementNS(SVG_NS, "text");
         setAttrs(text, {
-          "font-size": defaults.cardinals.fontSize,
-          "font-family": defaults.cardinals.fontFamily,
-          fill: defaults.cardinals.fill,
+          "font-size": cardStyle.fontSize,
+          "font-family": cardStyle.fontFamily,
+          fill: cardStyle.fill,
           "text-anchor": "middle",
-          "dominant-baseline": "central"
+          "dominant-baseline": "central",
+          class: this._classFor("cardinal")
         });
         text.textContent = label;
         svg.appendChild(text);
@@ -2814,6 +2910,12 @@ var bearing = (() => {
      */
     render() {
       if (!this._el) return this;
+      const gridStyle = this._resolveCategory("grid");
+      const primStyle = this._resolveCategory("primitive");
+      this._bgEl.setAttribute("fill", this._resolveCategory("background"));
+      setAttrs(this._gcPath, { stroke: gridStyle.stroke, "stroke-width": gridStyle.strokeWidth });
+      setAttrs(this._scPath, { stroke: gridStyle.stroke, "stroke-width": gridStyle.strokeWidth });
+      setAttrs(this._primEl, { stroke: primStyle.stroke, "stroke-width": primStyle.strokeWidth });
       const { greatCircles, smallCircles } = generateNet(10, this.net);
       this._gcPath.setAttribute("d", this._curvesToPathD(greatCircles));
       this._scPath.setAttribute("d", this._curvesToPathD(smallCircles));
@@ -2844,16 +2946,18 @@ var bearing = (() => {
           const d = this._rotate(dcos);
           const [px, py] = this._projectFn(d);
           const [sx, sy] = this._toSvg(px, py);
+          const s = this._resolveCategory("pole", item.style);
           if (!item._el) {
             item._el = document.createElementNS(SVG_NS, "circle");
+            setAttrs(item._el, { class: this._classFor("pole", item.style.class) });
             this._dataGroup.appendChild(item._el);
           }
           setAttrs(item._el, {
             cx: sx,
             cy: sy,
-            r: item.style.r || defaults.pole.r,
-            fill: item.style.fill || defaults.pole.fill,
-            stroke: item.style.stroke || defaults.pole.stroke
+            r: s.r,
+            fill: s.fill,
+            stroke: s.stroke
           });
           break;
         }
@@ -2862,16 +2966,18 @@ var bearing = (() => {
           const d = this._rotate(dcos);
           const [px, py] = this._projectFn(d);
           const [sx, sy] = this._toSvg(px, py);
+          const s = this._resolveCategory("line", item.style);
           if (!item._el) {
             item._el = document.createElementNS(SVG_NS, "circle");
+            setAttrs(item._el, { class: this._classFor("line", item.style.class) });
             this._dataGroup.appendChild(item._el);
           }
           setAttrs(item._el, {
             cx: sx,
             cy: sy,
-            r: item.style.r || defaults.line.r,
-            fill: item.style.fill || defaults.line.fill,
-            stroke: item.style.stroke || defaults.line.stroke
+            r: s.r,
+            fill: s.fill,
+            stroke: s.stroke
           });
           break;
         }
@@ -2879,14 +2985,16 @@ var bearing = (() => {
           const pole = planeToDcos(item.dd, item.dip);
           const pts3d = greatCircle(pole, 180);
           const d = segmentsToPathD(this._projectCurve(pts3d));
+          const s = this._resolveCategory("plane", item.style);
           if (!item._el) {
             item._el = document.createElementNS(SVG_NS, "path");
+            setAttrs(item._el, { class: this._classFor("plane", item.style.class) });
             this._dataGroup.appendChild(item._el);
           }
           setAttrs(item._el, {
             d,
-            stroke: item.style.stroke || defaults.plane.stroke,
-            "stroke-width": item.style.strokeWidth || defaults.plane.strokeWidth,
+            stroke: s.stroke,
+            "stroke-width": s.strokeWidth,
             fill: "none"
           });
           break;
@@ -2896,16 +3004,18 @@ var bearing = (() => {
           const halfAngle = item.halfAngle * DEG3;
           const pts3d = smallCircle(axis, halfAngle, 180);
           const d = segmentsToPathD(this._projectCurve(pts3d));
+          const s = this._resolveCategory("cone", item.style);
           if (!item._el) {
             item._el = document.createElementNS(SVG_NS, "path");
+            setAttrs(item._el, { class: this._classFor("cone", item.style.class) });
             this._dataGroup.appendChild(item._el);
           }
           setAttrs(item._el, {
             d,
-            stroke: item.style.stroke || defaults.cone.stroke,
-            "stroke-width": item.style.strokeWidth || defaults.cone.strokeWidth,
+            stroke: s.stroke,
+            "stroke-width": s.strokeWidth,
             fill: "none",
-            "stroke-dasharray": item.style.strokeDasharray || defaults.cone.strokeDasharray
+            "stroke-dasharray": s.strokeDasharray
           });
           break;
         }
@@ -2920,6 +3030,7 @@ var bearing = (() => {
       const defaultStroke = opts.stroke || "#333";
       const defaultWidth = opts.strokeWidth || 0.8;
       const colors = opts.colors;
+      const cls = this._classFor("contour");
       for (let k = 0; k < this._contourPaths.length; k++) {
         const { paths } = this._contourPaths[k];
         const stroke = colors && colors[k] ? colors[k] : defaultStroke;
@@ -2928,7 +3039,7 @@ var bearing = (() => {
           if (svgPts.length > 1) {
             const d = "M" + svgPts.map(([x, y]) => `${x},${y}`).join("L");
             const el = document.createElementNS(SVG_NS, "path");
-            setAttrs(el, { d, stroke, "stroke-width": defaultWidth, fill: "none" });
+            setAttrs(el, { d, stroke, "stroke-width": defaultWidth, fill: "none", class: cls });
             this._contourGroup.appendChild(el);
           }
         }
@@ -2959,7 +3070,8 @@ var bearing = (() => {
     _renderCardinalsDOM() {
       const cx = this._center;
       const r = this._radius;
-      const offset = defaults.cardinals.offset;
+      const cardStyle = this._resolveCategory("cardinals");
+      const offset = cardStyle.offset;
       const directions = [[0, 1, 0], [1, 0, 0], [0, -1, 0], [-1, 0, 0]];
       for (let i = 0; i < 4; i++) {
         const d = this._rotate(directions[i]);
@@ -2971,13 +3083,16 @@ var bearing = (() => {
           el.removeAttribute("display");
           el.setAttribute("x", cx + (r + offset) * d[0] / hLen);
           el.setAttribute("y", cx - (r + offset) * d[1] / hLen);
+          el.setAttribute("font-size", cardStyle.fontSize);
+          el.setAttribute("font-family", cardStyle.fontFamily);
+          el.setAttribute("fill", cardStyle.fill);
         }
       }
     }
   };
   function setAttrs(el, attrs) {
     for (const [k, v] of Object.entries(attrs)) {
-      el.setAttribute(k, v);
+      if (v !== void 0 && v !== null) el.setAttribute(k, v);
     }
   }
 

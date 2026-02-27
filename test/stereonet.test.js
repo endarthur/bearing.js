@@ -351,6 +351,87 @@ describe('Stereonet', () => {
     });
   });
 
+  describe('style system', () => {
+    it('instance style overrides default pole fill', () => {
+      const sn = new Stereonet({ style: { pole: { fill: 'magenta' } } });
+      const svg = sn.pole(90, 45).svg();
+      assert.ok(svg.includes('fill="magenta"'));
+    });
+
+    it('per-item style overrides instance style', () => {
+      const sn = new Stereonet({ style: { pole: { fill: 'magenta' } } });
+      const svg = sn.pole(90, 45, { fill: 'cyan' }).svg();
+      assert.ok(svg.includes('fill="cyan"'));
+    });
+
+    it('instance style overrides background', () => {
+      const sn = new Stereonet({ style: { background: '#1a1a1a' } });
+      const svg = sn.svg();
+      assert.ok(svg.includes('fill="#1a1a1a"'));
+    });
+
+    it('instance style overrides grid stroke', () => {
+      const sn = new Stereonet({ style: { grid: { stroke: '#444' } } });
+      const svg = sn.svg();
+      assert.ok(svg.includes('stroke="#444"'));
+    });
+
+    it('instance style overrides primitive stroke', () => {
+      const sn = new Stereonet({ style: { primitive: { stroke: 'red' } } });
+      const svg = sn.svg();
+      assert.ok(svg.includes('stroke="red"'));
+    });
+
+    it('instance style overrides cardinal fill', () => {
+      const sn = new Stereonet({ style: { cardinals: { fill: 'white' } } });
+      const svg = sn.svg();
+      assert.ok(svg.includes('fill="white"'));
+    });
+
+    it('CSS classes present by default', () => {
+      const svg = new Stereonet().pole(90, 45).plane(45, 60).line(0, 30).cone(0, 0, 20).svg();
+      assert.ok(svg.includes('class="bearing-background"'));
+      assert.ok(svg.includes('class="bearing-grid"'));
+      assert.ok(svg.includes('class="bearing-primitive"'));
+      assert.ok(svg.includes('class="bearing-cardinal"'));
+      assert.ok(svg.includes('class="bearing-pole"'));
+      assert.ok(svg.includes('class="bearing-plane"'));
+      assert.ok(svg.includes('class="bearing-line"'));
+      assert.ok(svg.includes('class="bearing-cone"'));
+    });
+
+    it('custom classPrefix', () => {
+      const svg = new Stereonet({ classPrefix: 'sn' }).pole(90, 45).svg();
+      assert.ok(svg.includes('class="sn-pole"'));
+      assert.ok(svg.includes('class="sn-background"'));
+      assert.ok(!svg.includes('class="bearing-'));
+    });
+
+    it('classPrefix: null disables classes', () => {
+      const svg = new Stereonet({ classPrefix: null }).pole(90, 45).svg();
+      assert.ok(!svg.includes('class='));
+    });
+
+    it('per-item style.class appended to CSS class', () => {
+      const svg = new Stereonet().pole(90, 45, { class: 'highlighted' }).svg();
+      assert.ok(svg.includes('class="bearing-pole highlighted"'));
+    });
+
+    it('setStyle() updates instance style', () => {
+      const sn = new Stereonet();
+      const before = sn.pole(90, 45).svg();
+      const after = sn.setStyle({ pole: { fill: 'orange' } }).svg();
+      assert.ok(!before.includes('fill="orange"'));
+      assert.ok(after.includes('fill="orange"'));
+    });
+
+    it('setStyle() is chainable', () => {
+      const sn = new Stereonet();
+      const result = sn.setStyle({ pole: { fill: 'red' } });
+      assert.strictEqual(result, sn);
+    });
+  });
+
   describe('SVG export', () => {
     it('svgDataURL() returns a data URI', () => {
       const sn = new Stereonet({ size: 200 }).pole(90, 45);

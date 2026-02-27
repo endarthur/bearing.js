@@ -10,7 +10,7 @@ import { project as equalAreaProject } from './projections/equal-area.js';
 import { project as equalAngleProject } from './projections/equal-angle.js';
 import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
-import { defaults } from './render/style.js';
+import { defaults, resolveStyle } from './render/style.js';
 import { computeContours } from './contouring.js';
 
 const DEG = Math.PI / 180;
@@ -86,6 +86,8 @@ export class Stereonet {
       : options.northPole
         ? Stereonet.rotationFromNorthPole(options.northPole[0], options.northPole[1], options.northPole[2] || 0)
         : null);
+    this._instanceStyle = options.style || null;
+    this._classPrefix = options.classPrefix !== undefined ? options.classPrefix : 'bearing';
     this._items = [];
     this._clipId = `bearing-clip-${nextClipId++}`;
 
@@ -96,10 +98,12 @@ export class Stereonet {
 
     // DOM references (created by element(), updated by render())
     this._el = null;
+    this._bgEl = null;
     this._gcPath = null;
     this._scPath = null;
     this._contourGroup = null;
     this._dataGroup = null;
+    this._primEl = null;
     this._cardinalEls = null;
   }
 
@@ -183,6 +187,28 @@ export class Stereonet {
     const c = this._center;
     const s = this._scale;
     return [c + px * s, c - py * s];
+  }
+
+  /** Resolve style for a category using the three-level cascade. */
+  _resolveCategory(category, itemStyle) {
+    return resolveStyle(category, this._instanceStyle, itemStyle);
+  }
+
+  /** Build CSS class string for an SVG element. Returns undefined if classes disabled. */
+  _classFor(suffix, extraClass) {
+    if (this._classPrefix === null) return undefined;
+    const base = `${this._classPrefix}-${suffix}`;
+    return extraClass ? `${base} ${extraClass}` : base;
+  }
+
+  /**
+   * Update the instance-level style at runtime. Call render() to apply.
+   * @param {Object} style - instance style overrides
+   * @returns {this}
+   */
+  setStyle(style) {
+    this._instanceStyle = style;
+    return this;
   }
 
   /** Rotate a 3D point by the stereonet's rotation matrix. */
@@ -349,18 +375,24 @@ export class Stereonet {
     const c = this._center;
     const r = this._radius;
 
-    svg.circle(c, c, r, { fill: defaults.background, stroke: 'none' });
+    svg.circle(c, c, r, {
+      fill: this._resolveCategory('background'),
+      stroke: 'none',
+      class: this._classFor('background'),
+    });
     svg.clipCircle(this._clipId, c, c, r);
     svg.openClipGroup(this._clipId);
 
     // Grid
+    const gridStyle = this._resolveCategory('grid');
     const { greatCircles, smallCircles } = generateNet(10, this.net);
     for (const gc of greatCircles) {
       for (const seg of this._projectCurve(gc)) {
         if (seg.length > 1) {
           svg.polyline(seg, {
-            stroke: defaults.grid.stroke,
-            'stroke-width': defaults.grid.strokeWidth,
+            stroke: gridStyle.stroke,
+            'stroke-width': gridStyle.strokeWidth,
+            class: this._classFor('grid'),
           });
         }
       }
@@ -369,8 +401,9 @@ export class Stereonet {
       for (const seg of this._projectCurve(sc)) {
         if (seg.length > 1) {
           svg.polyline(seg, {
-            stroke: defaults.grid.stroke,
-            'stroke-width': defaults.grid.strokeWidth,
+            stroke: gridStyle.stroke,
+            'stroke-width': gridStyle.strokeWidth,
+            class: this._classFor('grid'),
           });
         }
       }
@@ -389,10 +422,12 @@ export class Stereonet {
     svg.closeGroup();
 
     // Primitive circle
+    const primStyle = this._resolveCategory('primitive');
     svg.circle(c, c, r, {
       fill: 'none',
-      stroke: defaults.primitive.stroke,
-      'stroke-width': defaults.primitive.strokeWidth,
+      stroke: primStyle.stroke,
+      'stroke-width': primStyle.strokeWidth,
+      class: this._classFor('primitive'),
     });
 
     // Cardinals
@@ -402,13 +437,15 @@ export class Stereonet {
   }
 
   _renderCardinalsString(svg, cx, r) {
-    const offset = defaults.cardinals.offset;
+    const cardStyle = this._resolveCategory('cardinals');
+    const offset = cardStyle.offset;
     const style = {
-      'font-size': defaults.cardinals.fontSize,
-      'font-family': defaults.cardinals.fontFamily,
-      fill: defaults.cardinals.fill,
+      'font-size': cardStyle.fontSize,
+      'font-family': cardStyle.fontFamily,
+      fill: cardStyle.fill,
       'text-anchor': 'middle',
       'dominant-baseline': 'central',
+      class: this._classFor('cardinal'),
     };
 
     const directions = [
@@ -436,6 +473,7 @@ export class Stereonet {
     const defaultStroke = opts.stroke || '#333';
     const defaultWidth = opts.strokeWidth || 0.8;
     const colors = opts.colors;
+    const cls = this._classFor('contour');
 
     for (let k = 0; k < this._contourPaths.length; k++) {
       const { paths } = this._contourPaths[k];
@@ -447,6 +485,7 @@ export class Stereonet {
             stroke,
             'stroke-width': defaultWidth,
             fill: 'none',
+            class: cls,
           });
         }
       }
@@ -460,9 +499,11 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        svg.circle(sx, sy, item.style.r || defaults.pole.r, {
-          fill: item.style.fill || defaults.pole.fill,
-          stroke: item.style.stroke || defaults.pole.stroke,
+        const s = this._resolveCategory('pole', item.style);
+        svg.circle(sx, sy, s.r, {
+          fill: s.fill,
+          stroke: s.stroke,
+          class: this._classFor('pole', item.style.class),
         });
         break;
       }
@@ -471,21 +512,25 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        svg.circle(sx, sy, item.style.r || defaults.line.r, {
-          fill: item.style.fill || defaults.line.fill,
-          stroke: item.style.stroke || defaults.line.stroke,
+        const s = this._resolveCategory('line', item.style);
+        svg.circle(sx, sy, s.r, {
+          fill: s.fill,
+          stroke: s.stroke,
+          class: this._classFor('line', item.style.class),
         });
         break;
       }
       case 'plane': {
         const pole = planeToDcos(item.dd, item.dip);
         const pts3d = curves.greatCircle(pole, 180);
+        const s = this._resolveCategory('plane', item.style);
         for (const seg of this._projectCurve(pts3d)) {
           if (seg.length > 1) {
             svg.polyline(seg, {
-              stroke: item.style.stroke || defaults.plane.stroke,
-              'stroke-width': item.style.strokeWidth || defaults.plane.strokeWidth,
+              stroke: s.stroke,
+              'stroke-width': s.strokeWidth,
               fill: 'none',
+              class: this._classFor('plane', item.style.class),
             });
           }
         }
@@ -495,13 +540,15 @@ export class Stereonet {
         const axis = lineToDcos(item.trend, item.plunge);
         const halfAngle = item.halfAngle * DEG;
         const pts3d = curves.smallCircle(axis, halfAngle, 180);
+        const s = this._resolveCategory('cone', item.style);
         for (const seg of this._projectCurve(pts3d)) {
           if (seg.length > 1) {
             svg.polyline(seg, {
-              stroke: item.style.stroke || defaults.cone.stroke,
-              'stroke-width': item.style.strokeWidth || defaults.cone.strokeWidth,
+              stroke: s.stroke,
+              'stroke-width': s.strokeWidth,
               fill: 'none',
-              'stroke-dasharray': item.style.strokeDasharray || defaults.cone.strokeDasharray,
+              'stroke-dasharray': s.strokeDasharray,
+              class: this._classFor('cone', item.style.class),
             });
           }
         }
@@ -540,9 +587,14 @@ export class Stereonet {
     svg.setAttribute('viewBox', `0 0 ${s} ${s}`);
 
     // Background
-    const bg = document.createElementNS(SVG_NS, 'circle');
-    setAttrs(bg, { cx: c, cy: c, r, fill: defaults.background, stroke: 'none' });
-    svg.appendChild(bg);
+    this._bgEl = document.createElementNS(SVG_NS, 'circle');
+    setAttrs(this._bgEl, {
+      cx: c, cy: c, r,
+      fill: this._resolveCategory('background'),
+      stroke: 'none',
+      class: this._classFor('background'),
+    });
+    svg.appendChild(this._bgEl);
 
     // Clip definition
     const defs = document.createElementNS(SVG_NS, 'defs');
@@ -559,19 +611,22 @@ export class Stereonet {
     clipGroup.setAttribute('clip-path', `url(#${this._clipId})`);
 
     // Grid — two <path> elements (one setAttribute call each to update)
+    const gridStyle = this._resolveCategory('grid');
     this._gcPath = document.createElementNS(SVG_NS, 'path');
     setAttrs(this._gcPath, {
-      stroke: defaults.grid.stroke,
-      'stroke-width': defaults.grid.strokeWidth,
+      stroke: gridStyle.stroke,
+      'stroke-width': gridStyle.strokeWidth,
       fill: 'none',
+      class: this._classFor('grid'),
     });
     clipGroup.appendChild(this._gcPath);
 
     this._scPath = document.createElementNS(SVG_NS, 'path');
     setAttrs(this._scPath, {
-      stroke: defaults.grid.stroke,
-      'stroke-width': defaults.grid.strokeWidth,
+      stroke: gridStyle.stroke,
+      'stroke-width': gridStyle.strokeWidth,
       fill: 'none',
+      class: this._classFor('grid'),
     });
     clipGroup.appendChild(this._scPath);
 
@@ -586,25 +641,29 @@ export class Stereonet {
     svg.appendChild(clipGroup);
 
     // Primitive circle
-    const prim = document.createElementNS(SVG_NS, 'circle');
-    setAttrs(prim, {
+    const primStyle = this._resolveCategory('primitive');
+    this._primEl = document.createElementNS(SVG_NS, 'circle');
+    setAttrs(this._primEl, {
       cx: c, cy: c, r,
       fill: 'none',
-      stroke: defaults.primitive.stroke,
-      'stroke-width': defaults.primitive.strokeWidth,
+      stroke: primStyle.stroke,
+      'stroke-width': primStyle.strokeWidth,
+      class: this._classFor('primitive'),
     });
-    svg.appendChild(prim);
+    svg.appendChild(this._primEl);
 
     // Cardinal labels — 4 pre-created <text> elements
+    const cardStyle = this._resolveCategory('cardinals');
     this._cardinalEls = [];
     for (const label of ['N', 'E', 'S', 'W']) {
       const text = document.createElementNS(SVG_NS, 'text');
       setAttrs(text, {
-        'font-size': defaults.cardinals.fontSize,
-        'font-family': defaults.cardinals.fontFamily,
-        fill: defaults.cardinals.fill,
+        'font-size': cardStyle.fontSize,
+        'font-family': cardStyle.fontFamily,
+        fill: cardStyle.fill,
         'text-anchor': 'middle',
         'dominant-baseline': 'central',
+        class: this._classFor('cardinal'),
       });
       text.textContent = label;
       svg.appendChild(text);
@@ -621,6 +680,14 @@ export class Stereonet {
    */
   render() {
     if (!this._el) return this;
+
+    // Update structural styles (supports setStyle() at runtime)
+    const gridStyle = this._resolveCategory('grid');
+    const primStyle = this._resolveCategory('primitive');
+    this._bgEl.setAttribute('fill', this._resolveCategory('background'));
+    setAttrs(this._gcPath, { stroke: gridStyle.stroke, 'stroke-width': gridStyle.strokeWidth });
+    setAttrs(this._scPath, { stroke: gridStyle.stroke, 'stroke-width': gridStyle.strokeWidth });
+    setAttrs(this._primEl, { stroke: primStyle.stroke, 'stroke-width': primStyle.strokeWidth });
 
     // Grid — one setAttribute('d', ...) per path
     const { greatCircles, smallCircles } = generateNet(10, this.net);
@@ -662,15 +729,17 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
+        const s = this._resolveCategory('pole', item.style);
         if (!item._el) {
           item._el = document.createElementNS(SVG_NS, 'circle');
+          setAttrs(item._el, { class: this._classFor('pole', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
         setAttrs(item._el, {
           cx: sx, cy: sy,
-          r: item.style.r || defaults.pole.r,
-          fill: item.style.fill || defaults.pole.fill,
-          stroke: item.style.stroke || defaults.pole.stroke,
+          r: s.r,
+          fill: s.fill,
+          stroke: s.stroke,
         });
         break;
       }
@@ -679,15 +748,17 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
+        const s = this._resolveCategory('line', item.style);
         if (!item._el) {
           item._el = document.createElementNS(SVG_NS, 'circle');
+          setAttrs(item._el, { class: this._classFor('line', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
         setAttrs(item._el, {
           cx: sx, cy: sy,
-          r: item.style.r || defaults.line.r,
-          fill: item.style.fill || defaults.line.fill,
-          stroke: item.style.stroke || defaults.line.stroke,
+          r: s.r,
+          fill: s.fill,
+          stroke: s.stroke,
         });
         break;
       }
@@ -695,14 +766,16 @@ export class Stereonet {
         const pole = planeToDcos(item.dd, item.dip);
         const pts3d = curves.greatCircle(pole, 180);
         const d = segmentsToPathD(this._projectCurve(pts3d));
+        const s = this._resolveCategory('plane', item.style);
         if (!item._el) {
           item._el = document.createElementNS(SVG_NS, 'path');
+          setAttrs(item._el, { class: this._classFor('plane', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
         setAttrs(item._el, {
           d,
-          stroke: item.style.stroke || defaults.plane.stroke,
-          'stroke-width': item.style.strokeWidth || defaults.plane.strokeWidth,
+          stroke: s.stroke,
+          'stroke-width': s.strokeWidth,
           fill: 'none',
         });
         break;
@@ -712,16 +785,18 @@ export class Stereonet {
         const halfAngle = item.halfAngle * DEG;
         const pts3d = curves.smallCircle(axis, halfAngle, 180);
         const d = segmentsToPathD(this._projectCurve(pts3d));
+        const s = this._resolveCategory('cone', item.style);
         if (!item._el) {
           item._el = document.createElementNS(SVG_NS, 'path');
+          setAttrs(item._el, { class: this._classFor('cone', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
         setAttrs(item._el, {
           d,
-          stroke: item.style.stroke || defaults.cone.stroke,
-          'stroke-width': item.style.strokeWidth || defaults.cone.strokeWidth,
+          stroke: s.stroke,
+          'stroke-width': s.strokeWidth,
           fill: 'none',
-          'stroke-dasharray': item.style.strokeDasharray || defaults.cone.strokeDasharray,
+          'stroke-dasharray': s.strokeDasharray,
         });
         break;
       }
@@ -740,6 +815,7 @@ export class Stereonet {
     const defaultStroke = opts.stroke || '#333';
     const defaultWidth = opts.strokeWidth || 0.8;
     const colors = opts.colors;
+    const cls = this._classFor('contour');
 
     for (let k = 0; k < this._contourPaths.length; k++) {
       const { paths } = this._contourPaths[k];
@@ -749,7 +825,7 @@ export class Stereonet {
         if (svgPts.length > 1) {
           const d = 'M' + svgPts.map(([x, y]) => `${x},${y}`).join('L');
           const el = document.createElementNS(SVG_NS, 'path');
-          setAttrs(el, { d, stroke, 'stroke-width': defaultWidth, fill: 'none' });
+          setAttrs(el, { d, stroke, 'stroke-width': defaultWidth, fill: 'none', class: cls });
           this._contourGroup.appendChild(el);
         }
       }
@@ -783,7 +859,8 @@ export class Stereonet {
   _renderCardinalsDOM() {
     const cx = this._center;
     const r = this._radius;
-    const offset = defaults.cardinals.offset;
+    const cardStyle = this._resolveCategory('cardinals');
+    const offset = cardStyle.offset;
     const directions = [[0, 1, 0], [1, 0, 0], [0, -1, 0], [-1, 0, 0]];
 
     for (let i = 0; i < 4; i++) {
@@ -796,14 +873,17 @@ export class Stereonet {
         el.removeAttribute('display');
         el.setAttribute('x', cx + (r + offset) * d[0] / hLen);
         el.setAttribute('y', cx - (r + offset) * d[1] / hLen);
+        el.setAttribute('font-size', cardStyle.fontSize);
+        el.setAttribute('font-family', cardStyle.fontFamily);
+        el.setAttribute('fill', cardStyle.fill);
       }
     }
   }
 }
 
-/** Batch-set attributes on an SVG element. */
+/** Batch-set attributes on an SVG element. Skips undefined/null values. */
 function setAttrs(el, attrs) {
   for (const [k, v] of Object.entries(attrs)) {
-    el.setAttribute(k, v);
+    if (v !== undefined && v !== null) el.setAttribute(k, v);
   }
 }

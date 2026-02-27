@@ -15,4 +15,4 @@ export { computeContours } from './contouring.js';
 
 export { SvgBuilder } from './render/svg.js';
 export { generateNet, cardinalPoints } from './render/net.js';
-export { defaults as styleDefaults } from './render/style.js';
+export { defaults as styleDefaults, deepMerge as mergeStyles } from './render/style.js';
