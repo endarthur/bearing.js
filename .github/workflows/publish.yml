@@ -3,9 +3,13 @@ name: Publish to npm
 on:
   release:
     types: [published]
+  schedule:
+    # Monthly check that NPM_TOKEN is still valid (granular tokens expire after 90 days)
+    - cron: '0 0 1 * *'
 
 jobs:
   publish:
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,5 +23,18 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm test
       - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  check-token:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - name: Verify NPM_TOKEN is valid
+        run: npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
