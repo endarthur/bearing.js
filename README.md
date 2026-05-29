@@ -12,7 +12,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 
 - Equal-area (Schmidt) and equal-angle (Wulff) projections
 - Planes, poles, lines, great circles, small circles
-- Kernel-density contouring (Kamb method)
+- Kernel-density contouring (Fisher kernel, multiples-of-uniform-density)
 - Eigenvalue decomposition, Woodcock and Vollmer fabric parameters, Bingham statistics
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
 - SVG rendering with no DOM dependencies
