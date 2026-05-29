@@ -83,4 +83,34 @@ describe('mat3', () => {
     const prod = mat3.multiply(mat3.transpose(fixed), fixed);
     approxArr(prod, mat3.identity());
   });
+
+  describe('rotationBetween', () => {
+    const norm = v => {
+      const l = Math.hypot(v[0], v[1], v[2]);
+      return [v[0] / l, v[1] / l, v[2] / l];
+    };
+
+    it('rotates a onto b', () => {
+      const a = norm([1, 2, 3]);
+      const b = norm([-2, 1, 0.5]);
+      approxArr(mat3.transformVec3(mat3.rotationBetween(a, b), a), b);
+    });
+
+    it('is identity for identical vectors', () => {
+      approxArr(mat3.rotationBetween([0, 0, 1], [0, 0, 1]), mat3.identity());
+    });
+
+    it('handles antipodal vectors with a 180° rotation', () => {
+      for (const a of [[0, 0, 1], norm([1, 1, 0]), norm([0.3, -0.7, 0.2])]) {
+        const b = [-a[0], -a[1], -a[2]];
+        const r = mat3.transformVec3(mat3.rotationBetween(a, b), a);
+        approxArr(r, b);
+      }
+    });
+
+    it('produces an orthonormal rotation (RᵀR = I)', () => {
+      const R = mat3.rotationBetween(norm([1, 0, 2]), norm([0, 3, 1]));
+      approxArr(mat3.multiply(mat3.transpose(R), R), mat3.identity());
+    });
+  });
 });

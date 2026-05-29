@@ -480,6 +480,26 @@ describe('Stereonet project / unproject', () => {
     assert.ok(d[2] <= 1e-9, `lower hemisphere, got z=${d[2]}`);
   });
 
+  it('arcball drag keeps the grabbed point under the cursor', () => {
+    for (const projection of ['equal-area', 'equal-angle']) {
+      const sn = new Stereonet({ size: 400, projection });
+      sn.setCenter(30, 40);
+      const [x0, y0, x1, y1] = [230, 175, 250, 150];
+      const g = sn.unproject(x0, y0);          // geographic point under the cursor
+      assert.ok(g);
+      sn.setRotation(mat3.multiply(sn.arcball(x0, y0, x1, y1), sn.rotation));
+      const r = sn.project(g);                 // where it lands after the drag
+      assert.ok(!r.upper);
+      assert.ok(Math.abs(r.x - x1) < 1e-6, `${projection} x ${r.x} vs ${x1}`);
+      assert.ok(Math.abs(r.y - y1) < 1e-6, `${projection} y ${r.y} vs ${y1}`);
+    }
+  });
+
+  it('arcball is a no-op when start and end coincide', () => {
+    const sn = new Stereonet({ size: 400, center: [10, 20] });
+    assert.deepStrictEqual(sn.arcball(220, 190, 220, 190), mat3.identity());
+  });
+
   it('project <-> unproject round-trips across projections and rotations', () => {
     for (const projection of ['equal-area', 'equal-angle']) {
       for (const rot of [null, [30, 40], [200, 15]]) {

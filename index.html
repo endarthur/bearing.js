@@ -1833,6 +1833,7 @@ var bearing = (() => {
     identity: () => identity,
     multiply: () => multiply,
     orthonormalize: () => orthonormalize,
+    rotationBetween: () => rotationBetween,
     rotationFromAxisAngle: () => rotationFromAxisAngle,
     transformVec3: () => transformVec3,
     transpose: () => transpose
@@ -1876,6 +1877,28 @@ var bearing = (() => {
       kz * ky * t + kx * s,
       c + kz * kz * t
     ];
+  }
+  function rotationBetween(a, b) {
+    const cx = a[1] * b[2] - a[2] * b[1];
+    const cy = a[2] * b[0] - a[0] * b[2];
+    const cz = a[0] * b[1] - a[1] * b[0];
+    const crossLen = Math.sqrt(cx * cx + cy * cy + cz * cz);
+    const dot2 = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const angle2 = Math.atan2(crossLen, dot2);
+    if (angle2 < 1e-9) return identity();
+    let axis;
+    if (crossLen < 1e-9) {
+      const ref = Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+      axis = [
+        a[1] * ref[2] - a[2] * ref[1],
+        a[2] * ref[0] - a[0] * ref[2],
+        a[0] * ref[1] - a[1] * ref[0]
+      ];
+    } else {
+      axis = [cx, cy, cz];
+    }
+    const len = Math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+    return rotationFromAxisAngle([axis[0] / len, axis[1] / len, axis[2] / len], angle2);
   }
   function transpose(m) {
     return [
@@ -2573,6 +2596,39 @@ var bearing = (() => {
     /** Convenience: project a trend/plunge line directly to SVG coords. */
     projectLine(trend, plunge) {
       return this.project(lineToDcos(trend, plunge));
+    }
+    /**
+     * Map an SVG point onto the projection sphere in the view frame (z ≤ 0),
+     * using the same inverse as unproject(). Points outside the primitive circle
+     * are clamped to the equator (z = 0). Basis for arcball drag rotation.
+     */
+    _arcballPoint(sx, sy) {
+      const px = (sx - this._center) / this._scale;
+      const py = (this._center - sy) / this._scale;
+      const lim = this.projection === "equal-angle" ? 1 : 2;
+      const r2 = px * px + py * py;
+      if (r2 < lim) {
+        const inverseFn = this.projection === "equal-angle" ? inverse2 : inverse;
+        const d = inverseFn(px, py);
+        if (d) return d;
+      }
+      const r = Math.sqrt(r2) || 1;
+      return [px / r, py / r, 0];
+    }
+    /**
+     * Arcball drag rotation: the shortest-arc rotation taking the sphere point
+     * under SVG (x0,y0) onto the point under (x1,y1). Frame-consistent — no
+     * gimbal flip on sustained dragging. Premultiply onto the current rotation:
+     *
+     *   const R = mat3.multiply(sn.arcball(x0,y0,x1,y1), sn.rotation || mat3.identity());
+     *   sn.setRotation(mat3.orthonormalize(R));
+     *
+     * With no current rotation, the grabbed geographic point stays exactly under
+     * the cursor for in-net drags.
+     * @returns {number[]} 3×3 rotation matrix (flat row-major)
+     */
+    arcball(x0, y0, x1, y1) {
+      return rotationBetween(this._arcballPoint(x0, y0), this._arcballPoint(x1, y1));
     }
     /** Resolve style for a category using the three-level cascade. */
     _resolveCategory(category, itemStyle) {
@@ -3921,16 +3977,65 @@ var bearing = (() => {
 
   function setupDragRotate() {
     var el = sn.element();
-    var dragging = false, lastX, lastY, moved;
+    var dragging = false, moved = false, accMoved = 0;
+    var cur = null;   // virtual cursor in SVG/viewBox coordinates
+
+    // Map client (screen) px to the SVG viewBox coordinate space.
+    function toSvg(clientX, clientY) {
+      var rect = el.getBoundingClientRect();
+      var k = sn.size / rect.width;
+      return { x: (clientX - rect.left) * k, y: (clientY - rect.top) * k };
+    }
+    function clampToNet(p) {
+      var c = sn.size / 2, r = sn._radius;
+      var dx = p.x - c, dy = p.y - c, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > r) { var k = r / d; p.x = c + dx * k; p.y = c + dy * k; }
+      return p;
+    }
+    function commit() {
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render();
+      updateViewDisplay();
+    }
+    // Absolute drag (mouse without pointer-lock, touch): arcball — frame-consistent,
+    // the grabbed point follows the cursor, and there is no orientation-dependent flip.
+    function arcballTo(next) {
+      clampToNet(next);
+      var mx = next.x - cur.x, my = next.y - cur.y;
+      accMoved += Math.sqrt(mx * mx + my * my);
+      if (accMoved > 4) moved = true;
+      var arc = sn.arcball(cur.x, cur.y, next.x, next.y);
+      var R = sn.rotation ? mat3.multiply(arc, sn.rotation) : arc;
+      sn.setRotation(mat3.orthonormalize(R));
+      cur = next;
+      commit();
+    }
+    // Pointer-lock (opt-in): incremental screen-axis rotation, so dragging can spin
+    // the net indefinitely past the rim.
+    function deltaRotate(dx, dy) {
+      if (invertY) dy = -dy;
+      var clamp = 80;  // guard against browser movementX/Y spikes
+      dx = Math.max(-clamp, Math.min(clamp, dx));
+      dy = Math.max(-clamp, Math.min(clamp, dy));
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      var s = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
+      var delta = mat3.multiply(Rx, Ry);
+      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+      sn.setRotation(mat3.orthonormalize(R));
+      commit();
+    }
 
     el.addEventListener('mousedown', function(e) {
       if (e.button !== 0 || e.ctrlKey) return;
       if (spinTimer) stopSpin();
+      moved = false; accMoved = 0;
       if (usePointerLock) {
         el.requestPointerLock();
       } else {
-        dragging = true; moved = false;
-        lastX = e.clientX; lastY = e.clientY;
+        dragging = true;
+        cur = toSvg(e.clientX, e.clientY);
       }
       e.preventDefault();
     });
@@ -3943,58 +4048,36 @@ var bearing = (() => {
     });
     document.addEventListener('mousemove', function(e) {
       if (!dragging) return;
-      var dx, dy;
       if (usePointerLock) {
-        dx = e.movementX; dy = e.movementY;
+        deltaRotate(e.movementX, e.movementY);
       } else {
-        dx = e.clientX - lastX; dy = e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
+        var p = toSvg(e.clientX, e.clientY);
+        if (invertY) p.y = 2 * cur.y - p.y;   // mirror vertical motion about the cursor
+        arcballTo(p);
       }
-      if (invertY) dy = -dy;
-      // Clamp to prevent browser movementX/Y spikes
-      var clamp = 80;
-      dx = Math.max(-clamp, Math.min(clamp, dx));
-      dy = Math.max(-clamp, Math.min(clamp, dy));
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      var s = 0.005;
-      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
-      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
-      var delta = mat3.multiply(Rx, Ry);
-      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
-      sn.setRotation(mat3.orthonormalize(R));
-      if (showContours && currentDcos.length >= 3) sn.updateContours();
-      sn.render();
-      updateViewDisplay();
     });
     document.addEventListener('mouseup', function() {
       if (dragging && usePointerLock) document.exitPointerLock();
       dragging = false;
     });
-    // Touch support
+
+    // Touch support (single finger) — arcball, same as mouse drag.
     el.addEventListener('touchstart', function(e) {
       if (e.touches.length !== 1) return;
       if (spinTimer) stopSpin();
-      dragging = true; moved = false;
-      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      dragging = true; moved = false; accMoved = 0;
+      cur = toSvg(e.touches[0].clientX, e.touches[0].clientY);
       e.preventDefault();
     });
     el.addEventListener('touchmove', function(e) {
       if (!dragging || e.touches.length !== 1) return;
-      var dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
-      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-      if (invertY) dy = -dy;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      var s = 0.005;
-      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
-      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
-      var delta = mat3.multiply(Rx, Ry);
-      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
-      sn.setRotation(mat3.orthonormalize(R));
-      if (showContours && currentDcos.length >= 3) sn.updateContours();
-      sn.render(); updateViewDisplay();
+      var p = toSvg(e.touches[0].clientX, e.touches[0].clientY);
+      if (invertY) p.y = 2 * cur.y - p.y;
+      arcballTo(p);
       e.preventDefault();
     });
     el.addEventListener('touchend', function() { dragging = false; });
+
     el._dragMoved = function() { return moved; };
   }
 

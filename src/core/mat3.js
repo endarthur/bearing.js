@@ -44,6 +44,40 @@ export function rotationFromAxisAngle(axis, theta) {
   ];
 }
 
+/**
+ * Shortest-arc rotation matrix taking unit vector `a` onto unit vector `b`.
+ * Both must be unit vectors. Returns identity when they already coincide and a
+ * 180° rotation about an arbitrary perpendicular axis when they are antipodal.
+ * Frame-consistent (no gimbal lock) — the basis for arcball drag rotation.
+ */
+export function rotationBetween(a, b) {
+  const cx = a[1] * b[2] - a[2] * b[1];
+  const cy = a[2] * b[0] - a[0] * b[2];
+  const cz = a[0] * b[1] - a[1] * b[0];
+  const crossLen = Math.sqrt(cx * cx + cy * cy + cz * cz);
+  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  // atan2(|a×b|, a·b) is well-conditioned across the whole range, unlike
+  // acos near ±1 — important for near-antipodal inputs.
+  const angle = Math.atan2(crossLen, dot);
+  if (angle < 1e-9) return identity();
+
+  let axis;
+  if (crossLen < 1e-9) {
+    // Antipodal: the cross product is degenerate, so rotate 180° about any
+    // axis perpendicular to `a`.
+    const ref = Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+    axis = [
+      a[1] * ref[2] - a[2] * ref[1],
+      a[2] * ref[0] - a[0] * ref[2],
+      a[0] * ref[1] - a[1] * ref[0],
+    ];
+  } else {
+    axis = [cx, cy, cz];
+  }
+  const len = Math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
+  return rotationFromAxisAngle([axis[0] / len, axis[1] / len, axis[2] / len], angle);
+}
+
 export function transpose(m) {
   return [
     m[0], m[3], m[6],

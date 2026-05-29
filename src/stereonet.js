@@ -281,6 +281,41 @@ export class Stereonet {
     return this.project(lineToDcos(trend, plunge));
   }
 
+  /**
+   * Map an SVG point onto the projection sphere in the view frame (z ≤ 0),
+   * using the same inverse as unproject(). Points outside the primitive circle
+   * are clamped to the equator (z = 0). Basis for arcball drag rotation.
+   */
+  _arcballPoint(sx, sy) {
+    const px = (sx - this._center) / this._scale;
+    const py = (this._center - sy) / this._scale;
+    const lim = this.projection === 'equal-angle' ? 1 : 2;
+    const r2 = px * px + py * py;
+    if (r2 < lim) {
+      const inverseFn = this.projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
+      const d = inverseFn(px, py);
+      if (d) return d;
+    }
+    const r = Math.sqrt(r2) || 1;
+    return [px / r, py / r, 0];
+  }
+
+  /**
+   * Arcball drag rotation: the shortest-arc rotation taking the sphere point
+   * under SVG (x0,y0) onto the point under (x1,y1). Frame-consistent — no
+   * gimbal flip on sustained dragging. Premultiply onto the current rotation:
+   *
+   *   const R = mat3.multiply(sn.arcball(x0,y0,x1,y1), sn.rotation || mat3.identity());
+   *   sn.setRotation(mat3.orthonormalize(R));
+   *
+   * With no current rotation, the grabbed geographic point stays exactly under
+   * the cursor for in-net drags.
+   * @returns {number[]} 3×3 rotation matrix (flat row-major)
+   */
+  arcball(x0, y0, x1, y1) {
+    return mat3.rotationBetween(this._arcballPoint(x0, y0), this._arcballPoint(x1, y1));
+  }
+
   /** Resolve style for a category using the three-level cascade. */
   _resolveCategory(category, itemStyle) {
     return resolveStyle(category, this._instanceStyle, itemStyle);

@@ -1797,16 +1797,65 @@ Kamb, W.B. (1959) Ice petrofabric
 
   function setupDragRotate() {
     var el = sn.element();
-    var dragging = false, lastX, lastY, moved;
+    var dragging = false, moved = false, accMoved = 0;
+    var cur = null;   // virtual cursor in SVG/viewBox coordinates
+
+    // Map client (screen) px to the SVG viewBox coordinate space.
+    function toSvg(clientX, clientY) {
+      var rect = el.getBoundingClientRect();
+      var k = sn.size / rect.width;
+      return { x: (clientX - rect.left) * k, y: (clientY - rect.top) * k };
+    }
+    function clampToNet(p) {
+      var c = sn.size / 2, r = sn._radius;
+      var dx = p.x - c, dy = p.y - c, d = Math.sqrt(dx * dx + dy * dy);
+      if (d > r) { var k = r / d; p.x = c + dx * k; p.y = c + dy * k; }
+      return p;
+    }
+    function commit() {
+      if (showContours && currentDcos.length >= 3) sn.updateContours();
+      sn.render();
+      updateViewDisplay();
+    }
+    // Absolute drag (mouse without pointer-lock, touch): arcball — frame-consistent,
+    // the grabbed point follows the cursor, and there is no orientation-dependent flip.
+    function arcballTo(next) {
+      clampToNet(next);
+      var mx = next.x - cur.x, my = next.y - cur.y;
+      accMoved += Math.sqrt(mx * mx + my * my);
+      if (accMoved > 4) moved = true;
+      var arc = sn.arcball(cur.x, cur.y, next.x, next.y);
+      var R = sn.rotation ? mat3.multiply(arc, sn.rotation) : arc;
+      sn.setRotation(mat3.orthonormalize(R));
+      cur = next;
+      commit();
+    }
+    // Pointer-lock (opt-in): incremental screen-axis rotation, so dragging can spin
+    // the net indefinitely past the rim.
+    function deltaRotate(dx, dy) {
+      if (invertY) dy = -dy;
+      var clamp = 80;  // guard against browser movementX/Y spikes
+      dx = Math.max(-clamp, Math.min(clamp, dx));
+      dy = Math.max(-clamp, Math.min(clamp, dy));
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
+      var s = 0.005;
+      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
+      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
+      var delta = mat3.multiply(Rx, Ry);
+      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
+      sn.setRotation(mat3.orthonormalize(R));
+      commit();
+    }
 
     el.addEventListener('mousedown', function(e) {
       if (e.button !== 0 || e.ctrlKey) return;
       if (spinTimer) stopSpin();
+      moved = false; accMoved = 0;
       if (usePointerLock) {
         el.requestPointerLock();
       } else {
-        dragging = true; moved = false;
-        lastX = e.clientX; lastY = e.clientY;
+        dragging = true;
+        cur = toSvg(e.clientX, e.clientY);
       }
       e.preventDefault();
     });
@@ -1819,58 +1868,36 @@ Kamb, W.B. (1959) Ice petrofabric
     });
     document.addEventListener('mousemove', function(e) {
       if (!dragging) return;
-      var dx, dy;
       if (usePointerLock) {
-        dx = e.movementX; dy = e.movementY;
+        deltaRotate(e.movementX, e.movementY);
       } else {
-        dx = e.clientX - lastX; dy = e.clientY - lastY;
-        lastX = e.clientX; lastY = e.clientY;
+        var p = toSvg(e.clientX, e.clientY);
+        if (invertY) p.y = 2 * cur.y - p.y;   // mirror vertical motion about the cursor
+        arcballTo(p);
       }
-      if (invertY) dy = -dy;
-      // Clamp to prevent browser movementX/Y spikes
-      var clamp = 80;
-      dx = Math.max(-clamp, Math.min(clamp, dx));
-      dy = Math.max(-clamp, Math.min(clamp, dy));
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      var s = 0.005;
-      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
-      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
-      var delta = mat3.multiply(Rx, Ry);
-      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
-      sn.setRotation(mat3.orthonormalize(R));
-      if (showContours && currentDcos.length >= 3) sn.updateContours();
-      sn.render();
-      updateViewDisplay();
     });
     document.addEventListener('mouseup', function() {
       if (dragging && usePointerLock) document.exitPointerLock();
       dragging = false;
     });
-    // Touch support
+
+    // Touch support (single finger) — arcball, same as mouse drag.
     el.addEventListener('touchstart', function(e) {
       if (e.touches.length !== 1) return;
       if (spinTimer) stopSpin();
-      dragging = true; moved = false;
-      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+      dragging = true; moved = false; accMoved = 0;
+      cur = toSvg(e.touches[0].clientX, e.touches[0].clientY);
       e.preventDefault();
     });
     el.addEventListener('touchmove', function(e) {
       if (!dragging || e.touches.length !== 1) return;
-      var dx = e.touches[0].clientX - lastX, dy = e.touches[0].clientY - lastY;
-      lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
-      if (invertY) dy = -dy;
-      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved = true;
-      var s = 0.005;
-      var Ry = mat3.rotationFromAxisAngle([0, 1, 0], -dx * s);
-      var Rx = mat3.rotationFromAxisAngle([1, 0, 0], dy * s);
-      var delta = mat3.multiply(Rx, Ry);
-      var R = sn.rotation ? mat3.multiply(delta, sn.rotation) : delta;
-      sn.setRotation(mat3.orthonormalize(R));
-      if (showContours && currentDcos.length >= 3) sn.updateContours();
-      sn.render(); updateViewDisplay();
+      var p = toSvg(e.touches[0].clientX, e.touches[0].clientY);
+      if (invertY) p.y = 2 * cur.y - p.y;
+      arcballTo(p);
       e.preventDefault();
     });
     el.addEventListener('touchend', function() { dragging = false; });
+
     el._dragMoved = function() { return moved; };
   }
 
