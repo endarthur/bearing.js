@@ -21,6 +21,8 @@ const DEG = Math.PI / 180;
  * @param {number}  [options.gridSize=40] - grid cells per side
  * @param {number[]} [options.levels=[2,4,6,8]] - density levels (MUD)
  * @param {number}  [options.sigma] - kernel half-width in degrees (auto if omitted)
+ * @param {ReturnType<typeof densityGrid>} [options.grid] - a precomputed densityGrid
+ *   result to reuse instead of recomputing (must share projection/rotation/gridSize)
  * @returns {Array<{ level: number, paths: number[][][] }>}
  *   paths in **projected** coordinates [px, py]
  */
@@ -90,7 +92,7 @@ export function computeContours(dcos, options = {}) {
   const { levels = [2, 4, 6, 8] } = options;
   if (dcos.length === 0) return levels.map(level => ({ level, paths: [] }));
 
-  const { grid, gridSize, step, projR } = densityGrid(dcos, options);
+  const { grid, gridSize, step, projR } = options.grid || densityGrid(dcos, options);
 
   // --- marching squares at each level ----------------------------------------
   return levels.map(level => ({

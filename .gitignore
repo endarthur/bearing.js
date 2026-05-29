@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .claude/
+CLAUDE.md
 examples/standalone.html
 examples/interactive_standalone.html
 examples/analysis_standalone.html

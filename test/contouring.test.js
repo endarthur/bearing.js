@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeContours } from '../src/contouring.js';
+import { computeContours, densityGrid } from '../src/contouring.js';
 import { planeToDcos, lineToDcos } from '../src/core/conversions.js';
 import { Stereonet } from '../src/stereonet.js';
 
@@ -162,5 +162,55 @@ describe('Stereonet contour integration', () => {
     const svg = sn.svg();
     assert.ok(svg.includes('#f00') || svg.includes('#00f'),
       'SVG should include custom colors');
+  });
+});
+
+describe('densityGrid', () => {
+  it('returns grid metadata with the documented keys', () => {
+    const g = densityGrid(cluster, { gridSize: 30 });
+    assert.deepStrictEqual(Object.keys(g).sort(),
+      ['grid', 'gridSize', 'projR', 'projection', 'step']);
+    assert.strictEqual(g.gridSize, 30);
+    assert.strictEqual(g.projection, 'equal-area');
+    assert.strictEqual(g.projR, Math.SQRT2);
+    assert.strictEqual(g.grid.length, 30 * 30);
+  });
+
+  it('has finite interior cells and NaN outside the disk', () => {
+    const g = densityGrid(cluster, { gridSize: 30 });
+    const finite = g.grid.filter(Number.isFinite).length;
+    const nan = g.grid.filter(Number.isNaN).length;
+    assert.ok(finite > 0, 'some interior cells should be finite');
+    assert.ok(nan > 0, 'corner cells outside the circle should be NaN');
+    assert.strictEqual(finite + nan, g.grid.length);
+  });
+
+  it('empty input yields an all-NaN grid', () => {
+    const g = densityGrid([], { gridSize: 12 });
+    assert.strictEqual(g.grid.length, 144);
+    assert.ok(g.grid.every(Number.isNaN));
+  });
+
+  it('equal-angle projR is 1', () => {
+    assert.strictEqual(densityGrid(cluster, { gridSize: 20, projection: 'equal-angle' }).projR, 1);
+  });
+});
+
+describe('computeContours with a precomputed grid', () => {
+  it('options.grid yields paths identical to recomputing', () => {
+    const opts = { levels: [2, 4, 6], gridSize: 30, projection: 'equal-area' };
+    const fresh = computeContours(cluster, opts);
+    const g = densityGrid(cluster, opts);
+    const reused = computeContours(cluster, { ...opts, grid: g });
+    assert.deepStrictEqual(reused, fresh);
+  });
+
+  it('reused grid carries its rotation', () => {
+    const R = Stereonet.rotationFromCenter(45, 30);
+    const opts = { levels: [2], gridSize: 25, rotation: R };
+    const fresh = computeContours(cluster, opts);
+    const g = densityGrid(cluster, opts);
+    const reused = computeContours(cluster, { levels: [2], grid: g });
+    assert.deepStrictEqual(reused, fresh);
   });
 });

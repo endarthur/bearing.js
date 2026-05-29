@@ -39,6 +39,11 @@ export class SvgBuilder {
     return this;
   }
 
+  rect(x, y, width, height, style = {}) {
+    this.elements.push(`<rect ${attr({ x, y, width, height, ...style })}/>`);
+    return this;
+  }
+
   text(x, y, content, style = {}) {
     const { 'text-anchor': anchor, ...rest } = style;
     const anchorAttr = anchor ? ` text-anchor="${anchor}"` : '';

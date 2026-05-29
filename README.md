@@ -64,8 +64,58 @@ npm run build
 | `equalArea` / `equalAngle` | Projection functions |
 | `vec3` / `mat3` | 3D vector and matrix operations |
 | `curves` | Small circles, great circles as point sequences |
-| `computeContours` | Kernel-density contouring |
+| `computeContours` | Kernel-density contour lines |
+| `densityGrid` | Fisher-kernel density raster (MUD), reusable for heatmaps |
 | `SvgBuilder` | Low-level SVG path/element builder |
+
+## Interactivity & overlays
+
+Building an interactive viewer (cursor read-outs, click-to-pick, labels, heatmaps)
+on top of the engine? These methods cover the pixel ↔ attitude plumbing so you don't
+have to reach into internals.
+
+```js
+const sn = new Stereonet({ size: 560 });
+const el = sn.element();              // live DOM <svg>, updated in place by render()
+
+// Pixel → attitude: cursor read-out / click-to-pick (null outside the net)
+el.addEventListener('pointermove', e => {
+  const pt = /* map clientX/Y to the SVG viewBox */;
+  const dcos = sn.unproject(pt.x, pt.y);
+  if (dcos) console.log(conversions.dcosToLine(dcos)); // [trend, plunge]
+});
+
+// Attitude → pixel: place a leader/label that tracks rotation
+const { x, y, upper } = sn.projectLine(120, 35);  // upper === on the hidden hemisphere
+
+// Anchored text label (hidden automatically when it rotates to the upper hemisphere)
+sn.text(120, 35, 'B₁', { dx: 8, dy: -6, fill: '#b06f06' });
+
+// Net geometry for your own overlays — no private fields needed
+const { center, radius, scale, projR } = sn.layout;
+// a projected point [px, py] is at SVG [center + px*scale, center - py*scale]
+```
+
+### Density heatmap
+
+`heatmap()` paints a filled Fisher-kernel raster beneath the grid; it mirrors
+`contour()` (call `updateHeatmap()` after changing rotation, `clearHeatmap()` to remove):
+
+```js
+sn.heatmap(dcos, { gridSize: 48, color: t => `rgba(176,111,6,${t})` });
+sn.contour(dcos, { levels: [2, 4, 6, 8] });   // line contours over the fill
+```
+
+For full control, compute the raster once with `densityGrid()` and feed it to both your
+own renderer and `computeContours()` (via `options.grid`) to avoid recomputing it:
+
+```js
+import { densityGrid, computeContours } from './src/index.js';
+
+const grid = densityGrid(dcos, { projection: 'equal-area', gridSize: 48 });
+// grid → { grid: Float64Array, gridSize, step, projR, projection }; cells outside the net are NaN
+const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
+```
 
 ## Tests
 
@@ -73,7 +123,7 @@ npm run build
 npm test
 ```
 
-222 tests using Node.js built-in test runner.
+282 tests using Node.js built-in test runner.
 
 ## License
 

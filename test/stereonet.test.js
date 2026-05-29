@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Stereonet } from '../src/stereonet.js';
 import * as mat3 from '../src/core/mat3.js';
+import { lineToDcos } from '../src/core/conversions.js';
 
 describe('Stereonet', () => {
   it('default options', () => {
@@ -449,5 +450,148 @@ describe('Stereonet', () => {
       const decoded = decodeURIComponent(url.split(',')[1]);
       assert.ok(decoded.includes('fill="red"'));
     });
+  });
+});
+
+describe('Stereonet project / unproject', () => {
+  it('project() returns x, y and upper flag; straight-down maps to centre', () => {
+    const sn = new Stereonet({ size: 400 });
+    const r = sn.project(lineToDcos(0, 90)); // vertical line → net centre
+    assert.ok(Math.abs(r.x - 200) < 1e-6);
+    assert.ok(Math.abs(r.y - 200) < 1e-6);
+    assert.strictEqual(r.upper, false);
+  });
+
+  it('projectLine() equals project(lineToDcos)', () => {
+    const sn = new Stereonet({ size: 400, center: [30, 40] });
+    assert.deepStrictEqual(sn.projectLine(120, 35), sn.project(lineToDcos(120, 35)));
+  });
+
+  it('unproject() returns null well outside the net', () => {
+    const sn = new Stereonet({ size: 400 });
+    assert.strictEqual(sn.unproject(0, 0), null); // corner, far outside the circle
+  });
+
+  it('unproject() returns a lower-hemisphere unit vector inside the net', () => {
+    const sn = new Stereonet({ size: 400 });
+    const d = sn.unproject(250, 220);
+    assert.ok(d);
+    assert.ok(Math.abs(Math.hypot(d[0], d[1], d[2]) - 1) < 1e-9, 'unit length');
+    assert.ok(d[2] <= 1e-9, `lower hemisphere, got z=${d[2]}`);
+  });
+
+  it('project <-> unproject round-trips across projections and rotations', () => {
+    for (const projection of ['equal-area', 'equal-angle']) {
+      for (const rot of [null, [30, 40], [200, 15]]) {
+        const sn = new Stereonet({ size: 560, projection });
+        if (rot) sn.setCenter(rot[0], rot[1]);
+        for (const [t, p] of [[0, 10], [120, 40], [270, 80], [45, 5], [333, 60]]) {
+          const d = lineToDcos(t, p);
+          const { x, y, upper } = sn.project(d);
+          if (upper) continue;                       // rotated out of the lower hemisphere
+          const back = sn.unproject(x, y);
+          assert.ok(back, `unproject null for ${projection} rot=${rot} ${t}/${p}`);
+          const dot = back[0] * d[0] + back[1] * d[1] + back[2] * d[2];
+          assert.ok(Math.abs(dot - 1) < 1e-4, `${projection} rot=${rot} ${t}/${p} dot=${dot}`);
+        }
+      }
+    }
+  });
+});
+
+describe('Stereonet text labels', () => {
+  it('text() is chainable and tracked as an item', () => {
+    const sn = new Stereonet();
+    assert.strictEqual(sn.text(120, 45, 'V1'), sn);
+    assert.strictEqual(sn.items.length, 1);
+    assert.strictEqual(sn.items[0].type, 'text');
+  });
+
+  it('svg() includes the label content and styling', () => {
+    const svg = new Stereonet().text(120, 45, 'V1', { fill: '#0a0' }).svg();
+    assert.ok(svg.includes('>V1<'));
+    assert.ok(svg.includes('fill="#0a0"'));
+  });
+
+  it('label content is escaped', () => {
+    const svg = new Stereonet().text(0, 80, 'a<b>&"').svg();
+    assert.ok(svg.includes('a&lt;b&gt;&amp;&quot;'));
+    assert.ok(!svg.includes('<b>'));
+  });
+
+  it('a label projecting to the upper hemisphere is hidden', () => {
+    const sn = new Stereonet({ size: 400, center: [0, 0] }); // 90° tilt flips some lines up
+    let upper = null;
+    for (let t = 0; t < 360 && !upper; t += 10) {
+      for (let p = 0; p <= 80; p += 10) {
+        if (sn.project(lineToDcos(t, p)).upper) { upper = [t, p]; break; }
+      }
+    }
+    assert.ok(upper, 'expected some line on the upper hemisphere at this rotation');
+    sn.text(upper[0], upper[1], 'UPPERONLY');
+    assert.ok(!sn.svg().includes('UPPERONLY'));
+  });
+});
+
+describe('Stereonet layout accessor', () => {
+  it('reports centre, radius, scale and projR for equal-area', () => {
+    const { center, radius, scale, projR } = new Stereonet({ size: 500, padding: 30 }).layout;
+    assert.strictEqual(center, 250);
+    assert.strictEqual(radius, 220);
+    assert.strictEqual(projR, Math.SQRT2);
+    assert.ok(Math.abs(scale - 220 / Math.SQRT2) < 1e-9);
+  });
+
+  it('projR is 1 for equal-angle', () => {
+    assert.strictEqual(new Stereonet({ projection: 'equal-angle' }).layout.projR, 1);
+  });
+
+  it('radius matches the rim distance of a horizontal line', () => {
+    const sn = new Stereonet({ size: 500, padding: 30 });
+    const { center, radius } = sn.layout;
+    const r = sn.project(lineToDcos(0, 0)); // horizontal → primitive circle rim
+    const dist = Math.hypot(r.x - center, r.y - center);
+    assert.ok(Math.abs(dist - radius) < 1e-6, `rim dist ${dist} vs radius ${radius}`);
+  });
+});
+
+describe('Stereonet heatmap layer', () => {
+  const cluster = [];
+  for (let t = 0; t < 360; t += 15) cluster.push(lineToDcos(t, 80));
+
+  it('heatmap() is chainable', () => {
+    const sn = new Stereonet();
+    assert.strictEqual(sn.heatmap(cluster), sn);
+  });
+
+  it('svg() gains classed <rect> cells with a heatmap', () => {
+    const rects = s => (s.match(/<rect/g) || []).length;
+    assert.strictEqual(rects(new Stereonet({ size: 200 }).svg()), 0);
+    const heat = new Stereonet({ size: 200 }).heatmap(cluster, { gridSize: 24 }).svg();
+    assert.ok(rects(heat) > 0, 'heatmap should emit <rect> cells');
+    assert.ok(heat.includes('class="bearing-heatmap"'));
+  });
+
+  it('clearHeatmap() removes the raster', () => {
+    const sn = new Stereonet({ size: 200 }).heatmap(cluster, { gridSize: 24 });
+    assert.ok(sn.svg().includes('<rect'));
+    sn.clearHeatmap();
+    assert.ok(!sn.svg().includes('<rect'));
+  });
+
+  it('custom color function is applied', () => {
+    const svg = new Stereonet({ size: 200 })
+      .heatmap(cluster, { gridSize: 24, color: () => '#abcdef' }).svg();
+    assert.ok(svg.includes('fill="#abcdef"'));
+  });
+
+  it('empty dcos produces no cells', () => {
+    assert.ok(!new Stereonet({ size: 200 }).heatmap([], { gridSize: 24 }).svg().includes('<rect'));
+  });
+
+  it('works with equal-angle projection', () => {
+    const svg = new Stereonet({ size: 200, projection: 'equal-angle' })
+      .heatmap(cluster, { gridSize: 24 }).svg();
+    assert.ok((svg.match(/<rect/g) || []).length > 0);
   });
 });

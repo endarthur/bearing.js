@@ -11,12 +11,38 @@ import { project as equalAngleProject, inverse as equalAngleInverse } from './pr
 import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
 import { defaults, resolveStyle } from './render/style.js';
-import { computeContours } from './contouring.js';
+import { computeContours, densityGrid } from './contouring.js';
 
 const DEG = Math.PI / 180;
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 let nextClipId = 0;
+
+// Default heatmap ramp: pale paper → amber → red → maroon ("thermal" on light backgrounds).
+const HEATMAP_STOPS = [
+  [0.0, [255, 245, 200]],
+  [0.35, [246, 177, 74]],
+  [0.7, [224, 96, 62]],
+  [1.0, [120, 20, 30]],
+];
+
+/** Map a normalised density t∈[0,1] to a CSS rgb() string along the default ramp. */
+function defaultHeatmapColor(t) {
+  const x = t < 0 ? 0 : t > 1 ? 1 : t;
+  for (let i = 1; i < HEATMAP_STOPS.length; i++) {
+    const [t1, c1] = HEATMAP_STOPS[i];
+    if (x <= t1) {
+      const [t0, c0] = HEATMAP_STOPS[i - 1];
+      const f = (t1 - t0) > 0 ? (x - t0) / (t1 - t0) : 0;
+      const r = Math.round(c0[0] + f * (c1[0] - c0[0]));
+      const g = Math.round(c0[1] + f * (c1[1] - c0[1]));
+      const b = Math.round(c0[2] + f * (c1[2] - c0[2]));
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+  const last = HEATMAP_STOPS[HEATMAP_STOPS.length - 1][1];
+  return `rgb(${last[0]},${last[1]},${last[2]})`;
+}
 
 /**
  * Linearly interpolate to find equator crossing between two 3D points.
@@ -96,9 +122,15 @@ export class Stereonet {
     this._contourOptions = null;
     this._contourPaths = null; // cached result of computeContours
 
+    // Heatmap (density raster) state
+    this._heatmapDcos = null;
+    this._heatmapOptions = null;
+    this._heatmapData = null; // cached result of densityGrid
+
     // DOM references (created by element(), updated by render())
     this._el = null;
     this._bgEl = null;
+    this._heatmapGroup = null;
     this._gcPath = null;
     this._scPath = null;
     this._contourGroup = null;
@@ -180,6 +212,20 @@ export class Stereonet {
   get _scale() {
     const projRadius = this.projection === 'equal-angle' ? 1 : Math.SQRT2;
     return this._radius / projRadius;
+  }
+
+  /**
+   * Public geometry of the rendered net, for host apps that place their own
+   * overlays (heatmaps, leaders, hit-testing) without reaching into private fields.
+   * A projected point [px, py] maps to SVG [center + px*scale, center - py*scale].
+   * @returns {{center:number, radius:number, scale:number, projR:number}}
+   *   center: px of the net centre (both axes); radius: primitive-circle radius in px;
+   *   scale: px per unit of projected coordinate; projR: projected radius of the
+   *   primitive circle (√2 for equal-area, 1 for equal-angle).
+   */
+  get layout() {
+    const projR = this.projection === 'equal-angle' ? 1 : Math.SQRT2;
+    return { center: this._center, radius: this._radius, scale: this._scale, projR };
   }
 
   /** Convert projected [px, py] to SVG [x, y]. */
@@ -383,6 +429,91 @@ export class Stereonet {
     });
   }
 
+  /**
+   * Add a filled density heatmap (Fisher-kernel raster) for a set of direction
+   * cosines. Rendered beneath the grid; rotation-aware (call updateHeatmap()
+   * after changing rotation, mirroring updateContours()).
+   * @param {Array<number[]>} dcos - unit vectors (lower hemisphere)
+   * @param {Object} [options]
+   * @param {number} [options.gridSize=48] - raster resolution
+   * @param {number} [options.sigma] - kernel half-width in degrees (auto if omitted)
+   * @param {(t:number)=>string} [options.color] - maps normalised density t∈[0,1] to a CSS colour
+   * @param {number} [options.max] - density value mapped to t=1 (default: grid maximum)
+   * @param {number} [options.threshold=0.04] - skip cells whose normalised density is below this
+   * @param {number} [options.opacity] - per-cell fill-opacity
+   * @returns {this}
+   */
+  heatmap(dcos, options = {}) {
+    this._heatmapDcos = dcos;
+    this._heatmapOptions = options;
+    this._computeHeatmap();
+    return this;
+  }
+
+  /** Recompute the heatmap grid (call after rotation changes if a heatmap is active). */
+  updateHeatmap() {
+    this._computeHeatmap();
+    return this;
+  }
+
+  /** Remove heatmap data. Returns `this`. */
+  clearHeatmap() {
+    this._heatmapDcos = null;
+    this._heatmapOptions = null;
+    this._heatmapData = null;
+    if (this._heatmapGroup) {
+      while (this._heatmapGroup.firstChild) this._heatmapGroup.firstChild.remove();
+    }
+    return this;
+  }
+
+  _computeHeatmap() {
+    if (!this._heatmapDcos || this._heatmapDcos.length === 0) {
+      this._heatmapData = null;
+      return;
+    }
+    this._heatmapData = densityGrid(this._heatmapDcos, {
+      projection: this.projection,
+      rotation: this.rotation,
+      gridSize: 48,
+      ...this._heatmapOptions,
+    });
+  }
+
+  /**
+   * Walk the heatmap raster, invoking cb(x, y, size, fill) per drawable cell in
+   * SVG coordinates. Shared by the string and DOM renderers. No-op if no heatmap.
+   */
+  _heatmapCells(cb) {
+    const data = this._heatmapData;
+    if (!data) return;
+    const { grid, gridSize, step, projR } = data;
+    const opts = this._heatmapOptions || {};
+    const color = opts.color || defaultHeatmapColor;
+    const threshold = opts.threshold != null ? opts.threshold : 0.04;
+    let max = opts.max;
+    if (max == null) {
+      max = 0;
+      for (const v of grid) if (!Number.isNaN(v) && v > max) max = v;
+    }
+    if (!(max > 0)) return;
+    const { center, scale } = this.layout;
+    const cell = step * scale;            // cells tile edge-to-edge; crispEdges hides seams
+    for (let j = 0; j < gridSize; j++) {
+      const py = projR - j * step;
+      for (let i = 0; i < gridSize; i++) {
+        const v = grid[j * gridSize + i];
+        if (Number.isNaN(v)) continue;
+        const t = v / max;
+        if (t < threshold) continue;
+        const px = -projR + i * step;
+        const x = center + px * scale;
+        const y = center - py * scale;
+        cb(x - cell / 2, y - cell / 2, cell, color(t));
+      }
+    }
+  }
+
   /** Remove all data items. Returns `this`. */
   clear() {
     for (const item of this._items) {
@@ -443,6 +574,11 @@ export class Stereonet {
     });
     svg.clipCircle(this._clipId, c, c, r);
     svg.openClipGroup(this._clipId);
+
+    // Heatmap (beneath the grid)
+    if (this._heatmapData) {
+      this._renderHeatmapString(svg);
+    }
 
     // Grid
     const gridStyle = this._resolveCategory('grid');
@@ -527,6 +663,19 @@ export class Stereonet {
         style,
       );
     }
+  }
+
+  _renderHeatmapString(svg) {
+    const opacity = (this._heatmapOptions || {}).opacity;
+    const cls = this._classFor('heatmap');
+    this._heatmapCells((x, y, size, fill) => {
+      svg.rect(x, y, size, size, {
+        fill,
+        'fill-opacity': opacity,
+        'shape-rendering': 'crispEdges',
+        class: cls,
+      });
+    });
   }
 
   _renderContoursString(svg) {
@@ -688,6 +837,10 @@ export class Stereonet {
     const clipGroup = document.createElementNS(SVG_NS, 'g');
     clipGroup.setAttribute('clip-path', `url(#${this._clipId})`);
 
+    // Heatmap group (beneath grid)
+    this._heatmapGroup = document.createElementNS(SVG_NS, 'g');
+    clipGroup.appendChild(this._heatmapGroup);
+
     // Grid — two <path> elements (one setAttribute call each to update)
     const gridStyle = this._resolveCategory('grid');
     this._gcPath = document.createElementNS(SVG_NS, 'path');
@@ -771,6 +924,9 @@ export class Stereonet {
     const { greatCircles, smallCircles } = generateNet(10, this.net);
     this._gcPath.setAttribute('d', this._curvesToPathD(greatCircles));
     this._scPath.setAttribute('d', this._curvesToPathD(smallCircles));
+
+    // Heatmap
+    this._renderHeatmapDOM();
 
     // Contours
     this._renderContoursDOM();
@@ -907,6 +1063,26 @@ export class Stereonet {
         break;
       }
     }
+  }
+
+  /** Update the heatmap raster in the DOM. */
+  _renderHeatmapDOM() {
+    if (!this._heatmapGroup) return;
+    while (this._heatmapGroup.firstChild) this._heatmapGroup.firstChild.remove();
+    if (!this._heatmapData) return;
+    const opacity = (this._heatmapOptions || {}).opacity;
+    const cls = this._classFor('heatmap');
+    this._heatmapCells((x, y, size, fill) => {
+      const el = document.createElementNS(SVG_NS, 'rect');
+      setAttrs(el, {
+        x, y, width: size, height: size,
+        fill,
+        'fill-opacity': opacity,
+        'shape-rendering': 'crispEdges',
+        class: cls,
+      });
+      this._heatmapGroup.appendChild(el);
+    });
   }
 
   /** Update contour paths in the DOM. */
