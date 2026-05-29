@@ -9,6 +9,7 @@
 import * as vec3 from './core/vec3.js';
 import { symmetricEigen3 } from './core/eigen.js';
 import { dcosToLine } from './core/conversions.js';
+import { chiSquareSF, fSF } from './core/special.js';
 
 const RAD2DEG = 180 / Math.PI;
 
@@ -99,6 +100,55 @@ export function confidenceCone(dcos, confidence = 0.95) {
     halfAngle = Math.acos(Math.max(-1, Math.min(1, cosA))) * RAD2DEG;
   }
   return { mean: dcosToLine(meanVec), halfAngle, confidence };
+}
+
+// ---------------------------------------------------------------------------
+//  Hypothesis tests
+// ---------------------------------------------------------------------------
+
+/**
+ * Bingham test of uniformity for axial (undirected) orientation data: are the
+ * orientations uniformly distributed on the sphere, or is there a preferred
+ * fabric (cluster or girdle)? Based on the orientation-tensor eigenvalues τᵢ:
+ * under uniformity τᵢ → 1/3 and the statistic (15n/2)·(Στᵢ² − 1/3) is
+ * approximately χ² with 5 degrees of freedom.
+ *
+ * Use this for orientation data (poles, lineations) — unlike a vector Rayleigh
+ * test it is not biased by confining data to the lower hemisphere, and it
+ * detects girdles as well as clusters.
+ *
+ * @param {Array<number[]>} dcos
+ * @returns {{ n:number, eigenvalues:number[], statistic:number, df:number, p:number }}
+ *   Small p ⇒ reject uniformity (a preferred fabric exists).
+ */
+export function uniformityTest(dcos) {
+  const n = dcos.length;
+  if (n === 0) return { n: 0, eigenvalues: [1 / 3, 1 / 3, 1 / 3], statistic: 0, df: 5, p: 1 };
+  const { values } = symmetricEigen3(orientationTensor(dcos));
+  const sumSq = values[0] * values[0] + values[1] * values[1] + values[2] * values[2];
+  const statistic = (15 * n / 2) * (sumSq - 1 / 3);
+  return { n, eigenvalues: values, statistic, df: 5, p: chiSquareSF(statistic, 5) };
+}
+
+/**
+ * Watson–Williams two-sample test for a common mean direction on the sphere
+ * (parametric, assumes Fisher samples of similar, large concentration).
+ * Tests H₀: the two samples share a mean direction.
+ *
+ * @param {Array<number[]>} a
+ * @param {Array<number[]>} b
+ * @returns {{ F:number, df1:number, df2:number, p:number, Ra:number, Rb:number, R:number }}
+ *   Small p ⇒ the mean directions differ. Note: only reliable when both samples
+ *   are well concentrated (R̄ ≳ 0.7); sparse/dispersed data violate the assumption.
+ */
+export function commonMeanTest(a, b) {
+  const N = a.length + b.length;
+  const Ra = vec3.length(resultant(a));
+  const Rb = vec3.length(resultant(b));
+  const R = vec3.length(resultant(a.concat(b)));
+  const F = (N - 2) * (Ra + Rb - R) / (N - Ra - Rb);
+  const df1 = 2, df2 = 2 * (N - 2);
+  return { F, df1, df2, p: fSF(F, df1, df2), Ra, Rb, R };
 }
 
 // ---------------------------------------------------------------------------

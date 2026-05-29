@@ -15,6 +15,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Kernel-density contouring — Fisher kernel (multiples-of-uniform-density) or Kamb (1959) counting (σ)
 - Eigenvalue decomposition, Woodcock and Vollmer fabric parameters, Bingham statistics
 - Confidence regions: Fisher cone of confidence + eigenvector confidence ellipses
+- Hypothesis tests: spherical uniformity (Bingham), two-sample common mean (Watson–Williams), Rayleigh
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
@@ -65,7 +66,8 @@ npm run build
 |--------|-------------|
 | `Stereonet` | Main class — add planes, poles, lines, contours, render to SVG |
 | `conversions` | Attitude conversions (dip-direction, strike, direction cosines) |
-| `statistics` | Eigenvalues, mean vector, Fisher, Woodcock, Vollmer, Bingham, confidence cone/ellipse |
+| `statistics` | Eigenvalues, Fisher, Woodcock, Vollmer, Bingham, confidence cone/ellipse, uniformity & common-mean tests |
+| `circular` | Circular (azimuthal) statistics: mean, R, von Mises κ, Rayleigh test |
 | `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
 | `compass` | Device-orientation → attitude (`planeFromDeviceOrientation`, `lineFromDeviceOrientation`) |
@@ -133,7 +135,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-353 tests using Node.js built-in test runner.
+379 tests using Node.js built-in test runner.
 
 ## License
 

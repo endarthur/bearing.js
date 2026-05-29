@@ -10,6 +10,7 @@ export * as equalArea from './projections/equal-area.js';
 export * as equalAngle from './projections/equal-angle.js';
 
 export * as statistics from './statistics.js';
+export * as circular from './circular.js';
 export * as rose from './rose.js';
 export * as analysis from './analysis.js';
 export * as compass from './compass.js';

@@ -198,6 +198,9 @@ export interface ConfidenceEllipseResult {
   centerDir: Dcos; majorDir: Dcos; minorDir: Dcos; confidence: number;
 }
 
+export interface UniformityTest { n: number; eigenvalues: number[]; statistic: number; df: number; p: number; }
+export interface CommonMeanTest { F: number; df1: number; df2: number; p: number; Ra: number; Rb: number; R: number; }
+
 export namespace statistics {
   function resultant(dcos: Dcos[]): Vec3;
   function meanVector(dcos: Dcos[]): Dcos;
@@ -206,6 +209,18 @@ export namespace statistics {
   function orientationTensor(dcos: Dcos[]): Mat3;
   function principalAxes(dcos: Dcos[]): PrincipalAxes;
   function confidenceEllipse(dcos: Dcos[], options?: ConfidenceEllipseOptions): ConfidenceEllipseResult;
+  function uniformityTest(dcos: Dcos[]): UniformityTest;
+  function commonMeanTest(a: Dcos[], b: Dcos[]): CommonMeanTest;
+}
+
+export interface CircularOptions { axial?: boolean; }
+export namespace circular {
+  function resultant(azimuths: number[], options?: CircularOptions): { n: number; R: number; Rbar: number; mean: number };
+  function circularMean(azimuths: number[], options?: CircularOptions): number;
+  function circularVariance(azimuths: number[], options?: CircularOptions): number;
+  function circularStdDev(azimuths: number[], options?: CircularOptions): number;
+  function vonMisesKappa(azimuths: number[], options?: CircularOptions): number;
+  function rayleighTest(azimuths: number[], options?: CircularOptions): { n: number; Rbar: number; z: number; p: number };
 }
 
 export interface RoseBin {

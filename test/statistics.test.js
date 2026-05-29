@@ -4,6 +4,7 @@ import {
   resultant, meanVector, fisherStats,
   orientationTensor, principalAxes,
   confidenceCone, confidenceEllipse,
+  uniformityTest, commonMeanTest,
 } from '../src/statistics.js';
 import { planeToDcos, lineToDcos } from '../src/core/conversions.js';
 import * as vec3 from '../src/core/vec3.js';
@@ -336,5 +337,72 @@ describe('confidenceEllipse', () => {
       confidenceEllipse(cluster, { confidence: 0.99 }).a >
       confidenceEllipse(cluster, { confidence: 0.95 }).a,
     );
+  });
+});
+
+describe('uniformityTest', () => {
+  // Approximately uniform axial sample via a Fibonacci sphere (folded to lower hemisphere).
+  const fibonacci = (N) => {
+    const ga = Math.PI * (3 - Math.sqrt(5));
+    const out = [];
+    for (let i = 0; i < N; i++) {
+      const z = 1 - 2 * (i + 0.5) / N;
+      const r = Math.sqrt(Math.max(0, 1 - z * z));
+      const phi = i * ga;
+      let v = [r * Math.cos(phi), r * Math.sin(phi), z];
+      if (v[2] > 0) v = [-v[0], -v[1], -v[2]]; // fold to lower hemisphere (axial)
+      out.push(v);
+    }
+    return out;
+  };
+
+  it('a tight cluster rejects uniformity (tiny p)', () => {
+    const cluster = [];
+    for (let i = 0; i < 30; i++) cluster.push(lineToDcos(120 + (i % 5 - 2), 40 + (i % 3 - 1)));
+    assert.ok(uniformityTest(cluster).p < 0.001, `p = ${uniformityTest(cluster).p}`);
+  });
+
+  it('a girdle also rejects uniformity', () => {
+    const girdle = [];
+    for (let dd = 0; dd < 360; dd += 10) girdle.push(planeToDcos(dd, 90)); // poles on a great circle
+    assert.ok(uniformityTest(girdle).p < 0.01, `p = ${uniformityTest(girdle).p}`);
+  });
+
+  it('a near-uniform sample does not reject (large p)', () => {
+    assert.ok(uniformityTest(fibonacci(400)).p > 0.05, `p = ${uniformityTest(fibonacci(400)).p}`);
+  });
+
+  it('reports eigenvalues and 5 degrees of freedom', () => {
+    const t = uniformityTest(fibonacci(50));
+    assert.strictEqual(t.df, 5);
+    assert.strictEqual(t.eigenvalues.length, 3);
+  });
+});
+
+describe('commonMeanTest', () => {
+  const clusterAround = (trend, plunge, n) => {
+    const out = [];
+    for (let i = 0; i < n; i++) out.push(lineToDcos(trend + (i % 5 - 2) * 2, plunge + (Math.floor(i / 5) % 5 - 2) * 2));
+    return out;
+  };
+
+  it('two samples from the same mean are not distinguished (large p)', () => {
+    const a = clusterAround(120, 40, 25);
+    const b = clusterAround(121, 41, 25);
+    assert.ok(commonMeanTest(a, b).p > 0.05, `p = ${commonMeanTest(a, b).p}`);
+  });
+
+  it('two samples from clearly different means are distinguished (tiny p)', () => {
+    const a = clusterAround(120, 40, 25);
+    const b = clusterAround(200, 50, 25);
+    assert.ok(commonMeanTest(a, b).p < 0.01, `p = ${commonMeanTest(a, b).p}`);
+  });
+
+  it('reports F and degrees of freedom (2, 2(N-2))', () => {
+    const a = clusterAround(120, 40, 10);
+    const b = clusterAround(121, 41, 10);
+    const r = commonMeanTest(a, b);
+    assert.strictEqual(r.df1, 2);
+    assert.strictEqual(r.df2, 2 * (20 - 2));
   });
 });
