@@ -1556,7 +1556,9 @@ var bearing = (() => {
   __export(index_exports, {
     Stereonet: () => Stereonet,
     SvgBuilder: () => SvgBuilder,
+    analysis: () => analysis_exports,
     cardinalPoints: () => cardinalPoints,
+    compass: () => compass_exports,
     computeContours: () => computeContours,
     conversions: () => conversions_exports,
     curves: () => curves_exports,
@@ -2026,35 +2028,35 @@ var bearing = (() => {
     return type === "polar" ? generatePolarNet(interval) : generateEquatorialNet(interval);
   }
   function generateEquatorialNet(interval) {
-    const DEG5 = Math.PI / 180;
+    const DEG6 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let alpha = 0; alpha < 180; alpha += interval) {
-      const alphaR = alpha * DEG5;
+      const alphaR = alpha * DEG6;
       greatCircles.push(
         greatCircle([Math.sin(alphaR), 0, Math.cos(alphaR)], 360)
       );
     }
     for (let alpha = interval; alpha < 180; alpha += interval) {
       smallCircles.push(
-        smallCircle([0, 1, 0], alpha * DEG5, 360)
+        smallCircle([0, 1, 0], alpha * DEG6, 360)
       );
     }
     return { greatCircles, smallCircles };
   }
   function generatePolarNet(interval) {
-    const DEG5 = Math.PI / 180;
+    const DEG6 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let az = 0; az < 180; az += interval) {
-      const azR = az * DEG5;
+      const azR = az * DEG6;
       greatCircles.push(
         greatCircle([Math.cos(azR), -Math.sin(azR), 0], 360)
       );
     }
     for (let dip = interval; dip <= 90; dip += interval) {
       smallCircles.push(
-        smallCircle([0, 0, -1], dip * DEG5, 360)
+        smallCircle([0, 0, -1], dip * DEG6, 360)
       );
     }
     return { greatCircles, smallCircles };
@@ -4028,6 +4030,85 @@ var bearing = (() => {
       });
     }
     return svg.toString();
+  }
+
+  // src/analysis.js
+  var analysis_exports = {};
+  __export(analysis_exports, {
+    bestFitGreatCircle: () => bestFitGreatCircle,
+    bestFitPlane: () => bestFitPlane,
+    foldAxis: () => foldAxis,
+    rotateData: () => rotateData,
+    unfold: () => unfold
+  });
+  function bestFitGreatCircle(dcos) {
+    const { eigenvalues, eigenvectors } = principalAxes(dcos);
+    const pole = eigenvectors[2];
+    return {
+      pole,
+      axis: dcosToLine(pole),
+      plane: dcosToPlane(pole),
+      eigenvalues,
+      girdle: 2 * (eigenvalues[1] - eigenvalues[2])
+    };
+  }
+  function bestFitPlane(dcos) {
+    const { pole, plane, eigenvalues, girdle } = bestFitGreatCircle(dcos);
+    return { pole, plane, eigenvalues, girdle };
+  }
+  function foldAxis(poles) {
+    return bestFitGreatCircle(poles).axis;
+  }
+  function rotateData(dcos, axis, angleDeg) {
+    return rotateDcosArray(dcos, axis, angleDeg);
+  }
+  function unfold(dcos, dipDir, dip) {
+    const strike = lineToDcos(dipDir - 90, 0);
+    return rotateDcosArray(dcos, strike, -dip);
+  }
+
+  // src/compass.js
+  var compass_exports = {};
+  __export(compass_exports, {
+    deviceOrientationMatrix: () => deviceOrientationMatrix,
+    lineFromDeviceOrientation: () => lineFromDeviceOrientation,
+    planeFromDeviceOrientation: () => planeFromDeviceOrientation
+  });
+  var DEG5 = Math.PI / 180;
+  function deviceOrientationMatrix(alpha, beta, gamma) {
+    const a = alpha * DEG5, b = beta * DEG5, g = gamma * DEG5;
+    const cA = Math.cos(a), sA = Math.sin(a);
+    const cB = Math.cos(b), sB = Math.sin(b);
+    const cG = Math.cos(g), sG = Math.sin(g);
+    return [
+      cA * cG - sA * sB * sG,
+      -sA * cB,
+      cA * sG + sA * sB * cG,
+      sA * cG + cA * sB * sG,
+      cA * cB,
+      sA * sG - cA * sB * cG,
+      -cB * sG,
+      sB,
+      cB * cG
+    ];
+  }
+  function enuToBearing(v) {
+    return [v[0], v[1], -v[2]];
+  }
+  function applyDeclination(azimuth, declination) {
+    return ((azimuth + (declination || 0)) % 360 + 360) % 360;
+  }
+  function planeFromDeviceOrientation(alpha, beta, gamma, options = {}) {
+    const R = deviceOrientationMatrix(alpha, beta, gamma);
+    const normalENU = [R[2], R[5], R[8]];
+    const [dipDir, dip] = dcosToPlane(enuToBearing(normalENU));
+    return [applyDeclination(dipDir, options.declination), dip];
+  }
+  function lineFromDeviceOrientation(alpha, beta, gamma, options = {}) {
+    const R = deviceOrientationMatrix(alpha, beta, gamma);
+    const dirENU = [R[1], R[4], R[7]];
+    const [trend, plunge] = dcosToLine(enuToBearing(dirENU));
+    return [applyDeclination(trend, options.declination), plunge];
   }
   return __toCommonJS(index_exports);
 })();
