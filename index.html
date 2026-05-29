@@ -1567,6 +1567,7 @@ var bearing = (() => {
     io: () => io_exports,
     mat3: () => mat3_exports,
     mergeStyles: () => deepMerge,
+    rose: () => rose_exports,
     statistics: () => statistics_exports,
     styleDefaults: () => defaults,
     symmetricEigen3: () => symmetricEigen3,
@@ -1916,14 +1917,14 @@ var bearing = (() => {
   function orthonormalize(m) {
     let r0 = [m[0], m[1], m[2]];
     let r1 = [m[3], m[4], m[5]];
-    let r2;
+    let r22;
     let len = Math.sqrt(r0[0] * r0[0] + r0[1] * r0[1] + r0[2] * r0[2]);
     r0 = [r0[0] / len, r0[1] / len, r0[2] / len];
     let d = r1[0] * r0[0] + r1[1] * r0[1] + r1[2] * r0[2];
     r1 = [r1[0] - d * r0[0], r1[1] - d * r0[1], r1[2] - d * r0[2]];
     len = Math.sqrt(r1[0] * r1[0] + r1[1] * r1[1] + r1[2] * r1[2]);
     r1 = [r1[0] / len, r1[1] / len, r1[2] / len];
-    r2 = [
+    r22 = [
       r0[1] * r1[2] - r0[2] * r1[1],
       r0[2] * r1[0] - r0[0] * r1[2],
       r0[0] * r1[1] - r0[1] * r1[0]
@@ -1935,9 +1936,9 @@ var bearing = (() => {
       r1[0],
       r1[1],
       r1[2],
-      r2[0],
-      r2[1],
-      r2[2]
+      r22[0],
+      r22[1],
+      r22[2]
     ];
   }
 
@@ -1959,10 +1960,10 @@ var bearing = (() => {
     return [x * scale2, y * scale2];
   }
   function inverse(px, py) {
-    const r2 = px * px + py * py;
-    if (r2 > 2) return null;
-    const z = -(1 - r2 / 2);
-    const scale2 = Math.sqrt(1 - r2 / 4);
+    const r22 = px * px + py * py;
+    if (r22 > 2) return null;
+    const z = -(1 - r22 / 2);
+    const scale2 = Math.sqrt(1 - r22 / 4);
     return [px * scale2, py * scale2, z];
   }
 
@@ -1983,13 +1984,13 @@ var bearing = (() => {
     return [x / denom, y / denom];
   }
   function inverse2(px, py) {
-    const r2 = px * px + py * py;
-    if (r2 > 1) return null;
-    const denom = 1 + r2;
+    const r22 = px * px + py * py;
+    if (r22 > 1) return null;
+    const denom = 1 + r22;
     return [
       2 * px / denom,
       2 * py / denom,
-      -(1 - r2) / denom
+      -(1 - r22) / denom
     ];
   }
 
@@ -1998,35 +1999,35 @@ var bearing = (() => {
     return type === "polar" ? generatePolarNet(interval) : generateEquatorialNet(interval);
   }
   function generateEquatorialNet(interval) {
-    const DEG4 = Math.PI / 180;
+    const DEG5 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let alpha = 0; alpha < 180; alpha += interval) {
-      const alphaR = alpha * DEG4;
+      const alphaR = alpha * DEG5;
       greatCircles.push(
         greatCircle([Math.sin(alphaR), 0, Math.cos(alphaR)], 360)
       );
     }
     for (let alpha = interval; alpha < 180; alpha += interval) {
       smallCircles.push(
-        smallCircle([0, 1, 0], alpha * DEG4, 360)
+        smallCircle([0, 1, 0], alpha * DEG5, 360)
       );
     }
     return { greatCircles, smallCircles };
   }
   function generatePolarNet(interval) {
-    const DEG4 = Math.PI / 180;
+    const DEG5 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let az = 0; az < 180; az += interval) {
-      const azR = az * DEG4;
+      const azR = az * DEG5;
       greatCircles.push(
         greatCircle([Math.cos(azR), -Math.sin(azR), 0], 360)
       );
     }
     for (let dip = interval; dip <= 90; dip += interval) {
       smallCircles.push(
-        smallCircle([0, 0, -1], dip * DEG4, 360)
+        smallCircle([0, 0, -1], dip * DEG5, 360)
       );
     }
     return { greatCircles, smallCircles };
@@ -2568,10 +2569,10 @@ var bearing = (() => {
       let px = (sx - this._center) / this._scale;
       let py = (this._center - sy) / this._scale;
       const lim = this.projection === "equal-angle" ? 1 : 2;
-      const r2 = px * px + py * py;
-      if (r2 >= lim) {
-        if (r2 > lim * 1.01) return null;
-        const k = Math.sqrt(lim * (1 - 1e-9) / r2);
+      const r22 = px * px + py * py;
+      if (r22 >= lim) {
+        if (r22 > lim * 1.01) return null;
+        const k = Math.sqrt(lim * (1 - 1e-9) / r22);
         px *= k;
         py *= k;
       }
@@ -2606,13 +2607,13 @@ var bearing = (() => {
       const px = (sx - this._center) / this._scale;
       const py = (this._center - sy) / this._scale;
       const lim = this.projection === "equal-angle" ? 1 : 2;
-      const r2 = px * px + py * py;
-      if (r2 < lim) {
+      const r22 = px * px + py * py;
+      if (r22 < lim) {
         const inverseFn = this.projection === "equal-angle" ? inverse2 : inverse;
         const d = inverseFn(px, py);
         if (d) return d;
       }
-      const r = Math.sqrt(r2) || 1;
+      const r = Math.sqrt(r22) || 1;
       return [px / r, py / r, 0];
     }
     /**
@@ -3606,10 +3607,10 @@ var bearing = (() => {
   function nullVec(a00, a01, a02, a11, a12, a22, lam) {
     const r0 = [a00 - lam, a01, a02];
     const r1 = [a01, a11 - lam, a12];
-    const r2 = [a02, a12, a22 - lam];
+    const r22 = [a02, a12, a22 - lam];
     const c01 = cross3(r0, r1);
-    const c02 = cross3(r0, r2);
-    const c12 = cross3(r1, r2);
+    const c02 = cross3(r0, r22);
+    const c12 = cross3(r1, r22);
     const l01 = c01[0] * c01[0] + c01[1] * c01[1] + c01[2] * c01[2];
     const l02 = c02[0] * c02[0] + c02[1] * c02[1] + c02[2] * c02[2];
     const l12 = c12[0] * c12[0] + c12[1] * c12[1] + c12[2] * c12[2];
@@ -3709,6 +3710,123 @@ var bearing = (() => {
     const kappa1 = n * (s2 - s1);
     const kappa2 = n * (s3 - s1);
     return { eigenvalues: values, eigenvectors: vectors, K, C, P, G, R, kappa1, kappa2 };
+  }
+
+  // src/rose.js
+  var rose_exports = {};
+  __export(rose_exports, {
+    roseBins: () => roseBins,
+    rosePetals: () => rosePetals,
+    roseSVG: () => roseSVG
+  });
+  var DEG4 = Math.PI / 180;
+  function petalPoint(cx, cy, r, azDeg) {
+    const a = azDeg * DEG4;
+    return [cx + r * Math.sin(a), cy - r * Math.cos(a)];
+  }
+  function roseBins(azimuths, options = {}) {
+    const binWidth = options.binWidth || 10;
+    const axial = !!options.axial;
+    const nBins = Math.round(360 / binWidth);
+    const counts = new Array(nBins).fill(0);
+    const add2 = (az) => {
+      const a = (az % 360 + 360) % 360;
+      const idx = Math.floor((a + binWidth / 2) / binWidth) % nBins;
+      counts[idx]++;
+    };
+    for (const az of azimuths) {
+      if (!Number.isFinite(az)) continue;
+      add2(az);
+      if (axial) add2(az + 180);
+    }
+    let n = 0, maxCount = 0;
+    for (const c of counts) {
+      n += c;
+      if (c > maxCount) maxCount = c;
+    }
+    const bins = counts.map((count, i) => {
+      const midDeg = i * binWidth;
+      return {
+        startDeg: midDeg - binWidth / 2,
+        endDeg: midDeg + binWidth / 2,
+        midDeg,
+        count,
+        frequency: n > 0 ? count / n : 0
+      };
+    });
+    return {
+      bins,
+      binWidth,
+      n,
+      maxCount,
+      maxFrequency: n > 0 ? maxCount / n : 0,
+      axial
+    };
+  }
+  function rosePetals(binned, options = {}) {
+    const cx = options.cx ?? 0;
+    const cy = options.cy ?? 0;
+    const R = options.radius ?? 100;
+    const r0 = options.innerRadius ?? 0;
+    const scale2 = options.scale || "linear";
+    const max = binned.maxCount || 1;
+    const samples = Math.max(1, Math.round(binned.binWidth / 5));
+    const petals = [];
+    for (const bin of binned.bins) {
+      if (bin.count <= 0) continue;
+      const frac = scale2 === "sqrt" ? Math.sqrt(bin.count / max) : bin.count / max;
+      const r1 = r0 + (R - r0) * frac;
+      const points = [];
+      if (r0 > 1e-9) points.push(petalPoint(cx, cy, r0, bin.startDeg));
+      else points.push([cx, cy]);
+      for (let s = 0; s <= samples; s++) {
+        const az = bin.startDeg + (bin.endDeg - bin.startDeg) * (s / samples);
+        points.push(petalPoint(cx, cy, r1, az));
+      }
+      if (r0 > 1e-9) {
+        for (let s = samples; s >= 0; s--) {
+          const az = bin.startDeg + (bin.endDeg - bin.startDeg) * (s / samples);
+          points.push(petalPoint(cx, cy, r0, az));
+        }
+      }
+      petals.push({ bin, points, radius: r1 });
+    }
+    return petals;
+  }
+  var r2 = (x) => Math.round(x * 100) / 100;
+  function roseSVG(azimuths, options = {}) {
+    const size = options.size || 300;
+    const pad = options.padding ?? 20;
+    const cx = size / 2, cy = size / 2;
+    const radius = (size - 2 * pad) / 2;
+    const binned = roseBins(azimuths, options);
+    const svg = new SvgBuilder(size, size);
+    svg.circle(cx, cy, radius, {
+      fill: options.background || "none",
+      stroke: options.frameStroke || "#999",
+      "stroke-width": 1
+    });
+    const rings = options.rings ?? 0;
+    for (let i = 1; i < rings; i++) {
+      svg.circle(cx, cy, radius * i / rings, { fill: "none", stroke: "#ddd", "stroke-width": 0.5 });
+    }
+    const petals = rosePetals(binned, {
+      cx,
+      cy,
+      radius,
+      scale: options.scale,
+      innerRadius: options.innerRadius
+    });
+    for (const p of petals) {
+      const d = "M" + p.points.map(([x, y]) => `${r2(x)},${r2(y)}`).join("L") + "Z";
+      svg.path(d, {
+        fill: options.fill || "#e8920c",
+        "fill-opacity": options.fillOpacity ?? 0.8,
+        stroke: options.petalStroke || "#7a4a06",
+        "stroke-width": options.petalStrokeWidth ?? 0.5
+      });
+    }
+    return svg.toString();
   }
   return __toCommonJS(index_exports);
 })();

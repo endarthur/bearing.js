@@ -15,8 +15,10 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Kernel-density contouring (Fisher kernel, multiples-of-uniform-density)
 - Eigenvalue decomposition, Woodcock and Vollmer fabric parameters, Bingham statistics
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
+- Rose diagrams (axial/directional binning, petal geometry, SVG output)
+- Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
 - SVG rendering with no DOM dependencies
-- ~24 KB minified, ~8 KB gzipped
+- ~34 KB minified, ~11 KB gzipped
 
 ## Install
 
@@ -60,6 +62,7 @@ npm run build
 | `Stereonet` | Main class — add planes, poles, lines, contours, render to SVG |
 | `conversions` | Attitude conversions (dip-direction, strike, direction cosines) |
 | `statistics` | Eigenvalues, mean vector, Fisher, Woodcock, Vollmer, Bingham |
+| `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `io` | Parse attitude strings and text blocks |
 | `equalArea` / `equalAngle` | Projection functions |
 | `vec3` / `mat3` | 3D vector and matrix operations |
@@ -123,7 +126,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-282 tests using Node.js built-in test runner.
+304 tests using Node.js built-in test runner.
 
 ## License
 

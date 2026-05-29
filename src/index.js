@@ -10,6 +10,7 @@ export * as equalArea from './projections/equal-area.js';
 export * as equalAngle from './projections/equal-angle.js';
 
 export * as statistics from './statistics.js';
+export * as rose from './rose.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';
 
