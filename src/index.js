@@ -13,6 +13,7 @@ export * as statistics from './statistics.js';
 export * as rose from './rose.js';
 export * as analysis from './analysis.js';
 export * as compass from './compass.js';
+export * as color from './color.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';
 

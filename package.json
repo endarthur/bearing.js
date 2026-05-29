@@ -25,10 +25,12 @@
   ],
   "main": "dist/bearing.cjs",
   "module": "src/index.js",
+  "types": "bearing.d.ts",
   "unpkg": "dist/bearing.min.js",
   "jsdelivr": "dist/bearing.min.js",
   "exports": {
     ".": {
+      "types": "./bearing.d.ts",
       "import": "./src/index.js",
       "require": "./dist/bearing.cjs",
       "default": "./src/index.js"
@@ -37,6 +39,7 @@
   "files": [
     "src/",
     "dist/",
+    "bearing.d.ts",
     "LICENSE"
   ],
   "scripts": {

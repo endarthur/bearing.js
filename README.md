@@ -21,6 +21,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Rose diagrams (axial/directional binning, petal geometry, SVG output)
 - Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
 - SVG rendering with no DOM dependencies; PNG export via canvas (`toPNG`)
+- Ships TypeScript declarations (`bearing.d.ts`) — no build step, source stays plain JS
 - ~34 KB minified, ~11 KB gzipped
 
 ## Install
@@ -68,6 +69,7 @@ npm run build
 | `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
 | `compass` | Device-orientation → attitude (`planeFromDeviceOrientation`, `lineFromDeviceOrientation`) |
+| `color` | Named colour scales + value→colour mapping (`colorScale`, `sampleScale`, `mapValue`) |
 | `io` | Parse attitude strings and text blocks |
 | `equalArea` / `equalAngle` | Projection functions |
 | `vec3` / `mat3` | 3D vector and matrix operations |
@@ -131,7 +133,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-345 tests using Node.js built-in test runner.
+353 tests using Node.js built-in test runner.
 
 ## License
 
