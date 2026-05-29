@@ -640,3 +640,26 @@ describe('Stereonet heatmap layer', () => {
     assert.ok((svg.match(/<rect/g) || []).length > 0);
   });
 });
+
+describe('Stereonet PNG export', () => {
+  it('_pngSize defaults to 2× the net size', () => {
+    assert.strictEqual(new Stereonet({ size: 300 })._pngSize(), 600);
+  });
+
+  it('_pngSize honours scale, and width overrides scale', () => {
+    const sn = new Stereonet({ size: 300 });
+    assert.strictEqual(sn._pngSize({ scale: 3 }), 900);
+    assert.strictEqual(sn._pngSize({ width: 512 }), 512);
+    assert.strictEqual(sn._pngSize({ width: 512, scale: 3 }), 512);
+  });
+
+  it('toPNG() returns a Promise', () => {
+    const p = new Stereonet({ size: 100 }).toPNG();
+    assert.ok(p && typeof p.then === 'function');
+    return p.then(() => {}, () => {});   // no DOM in Node — swallow either way
+  });
+
+  it('toPNG() rejects without a DOM (Image unavailable)', async () => {
+    await assert.rejects(() => new Stereonet({ size: 100 }).toPNG());
+  });
+});

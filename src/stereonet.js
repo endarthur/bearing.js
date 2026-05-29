@@ -1238,6 +1238,66 @@ export class Stereonet {
     document.body.removeChild(a);
   }
 
+  /**
+   * Output pixel size for raster export. Square (the net is square).
+   * @param {Object} [options] - { width } overrides { scale } (default scale 2)
+   * @returns {number} side length in pixels
+   */
+  _pngSize(options = {}) {
+    if (options.width) return Math.round(options.width);
+    return Math.round(this.size * (options.scale || 2));
+  }
+
+  /**
+   * Rasterise the stereonet to a PNG data URL. Browser-only (uses Image + canvas).
+   * @param {Object} [options]
+   * @param {number} [options.scale=2] - pixel scale factor (e.g. 2 for retina)
+   * @param {number} [options.width] - explicit output side in px (overrides scale)
+   * @param {string} [options.background] - colour painted behind the SVG (default transparent)
+   * @returns {Promise<string>} data:image/png;base64,... URL
+   */
+  toPNG(options = {}) {
+    return new Promise((resolve, reject) => {
+      const side = this._pngSize(options);
+      const url = this.svgDataURL();
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = side;
+          canvas.height = side;
+          const ctx = canvas.getContext('2d');
+          if (options.background) {
+            ctx.fillStyle = options.background;
+            ctx.fillRect(0, 0, side, side);
+          }
+          ctx.drawImage(img, 0, 0, side, side);
+          resolve(canvas.toDataURL('image/png'));
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.onerror = () => reject(new Error('Failed to rasterise stereonet SVG'));
+      img.src = url;
+    });
+  }
+
+  /**
+   * Trigger a browser download of the stereonet as a PNG (browser-only).
+   * @param {string} [filename='stereonet.png']
+   * @param {Object} [options] - same as toPNG()
+   * @returns {Promise<void>}
+   */
+  async downloadPNG(filename = 'stereonet.png', options = {}) {
+    const url = await this.toPNG(options);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
   /** Update cardinal label positions in the DOM. */
   _renderCardinalsDOM() {
     const cx = this._center;

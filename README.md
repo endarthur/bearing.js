@@ -18,7 +18,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
 - Rose diagrams (axial/directional binning, petal geometry, SVG output)
 - Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
-- SVG rendering with no DOM dependencies
+- SVG rendering with no DOM dependencies; PNG export via canvas (`toPNG`)
 - ~34 KB minified, ~11 KB gzipped
 
 ## Install
@@ -127,7 +127,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-320 tests using Node.js built-in test runner.
+324 tests using Node.js built-in test runner.
 
 ## License
 

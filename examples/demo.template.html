@@ -939,7 +939,7 @@ body {
           <div class="sn-tools">
             <button id="btn-contour">&#9673; Contour</button>
             <button id="btn-clear">&#10005; Clear</button>
-            <button id="btn-export">&#8595; Export</button>
+            <button id="btn-export" title="Click: SVG · Shift+Click: PNG">&#8595; Export</button>
             <button id="btn-reset">&#10227; Reset</button>
           </div>
           <input type="color" id="color-picker-hidden">
@@ -2293,6 +2293,14 @@ Kamb, W.B. (1959) Ice petrofabric
     setLED('exp', 'blue'); conLog('SVG exported.');
     setTimeout(function() { setLED('exp', 'off'); }, 2000);
   }
+  function exportPNG() {
+    setLED('exp', 'blue'); conLog('Rendering PNG…');
+    sn.downloadPNG('stereonet.png', { scale: 2 }).then(function() {
+      conLog('PNG exported.'); setLED('exp', 'off');
+    }, function(err) {
+      conLog('PNG export failed: ' + ((err && err.message) || err)); setLED('exp', 'off');
+    });
+  }
   function resetView() {
     stopSpin();
     sn.setRotation(null);
@@ -3341,12 +3349,12 @@ Kamb, W.B. (1959) Ice petrofabric
   function execCmd(input) {
     var p = input.split(/\s+/), cmd = p[0].toLowerCase(), args = p.slice(1);
     switch (cmd) {
-      case 'help': return 'Commands: help, plot, clear, stats, contour, export,\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  spin <azim> <plunge> <angle> [tps] | off,\n  groups, group <n|name|all>, stereogram [dm],\n  new, save <name>, load [name|#], projects,\n  cls, about';
+      case 'help': return 'Commands: help, plot, clear, stats, contour, export [png],\n  rotate <t> <p>, reset, sample, tile,\n  add <dd> <dip> [p|l] [g] [#color],\n  color [n] [#hex], rem <comment>,\n  spin <azim> <plunge> <angle> [tps] | off,\n  groups, group <n|name|all>, stereogram [dm],\n  new, save <name>, load [name|#], projects,\n  cls, about';
       case 'plot': plotData(); return '';
       case 'clear': clearData(); return 'Data cleared.';
       case 'stats': return getStatsText();
       case 'contour': toggleContour(); return 'Contours ' + (showContours ? 'ON' : 'OFF') + '.';
-      case 'export': exportSVG(); return '';
+      case 'export': if ((args[0] || '').toLowerCase() === 'png') exportPNG(); else exportSVG(); return '';
       case 'rotate':
         if (args.length < 2) return 'Usage: rotate <trend> <plunge>';
         var t = parseFloat(args[0]), pl = parseFloat(args[1]);
@@ -3612,7 +3620,7 @@ Kamb, W.B. (1959) Ice petrofabric
     });
     $('btn-contour').addEventListener('click', toggleContour);
     $('btn-clear').addEventListener('click', clearData);
-    $('btn-export').addEventListener('click', exportSVG);
+    $('btn-export').addEventListener('click', function(e) { if (e.shiftKey) exportPNG(); else exportSVG(); });
     $('btn-reset').addEventListener('click', resetView);
     $('btn-plot').addEventListener('click', plotData);
     $('btn-sample').addEventListener('click', loadSample);
