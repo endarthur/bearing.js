@@ -169,7 +169,7 @@ describe('densityGrid', () => {
   it('returns grid metadata with the documented keys', () => {
     const g = densityGrid(cluster, { gridSize: 30 });
     assert.deepStrictEqual(Object.keys(g).sort(),
-      ['grid', 'gridSize', 'projR', 'projection', 'step']);
+      ['grid', 'gridSize', 'method', 'projR', 'projection', 'step']);
     assert.strictEqual(g.gridSize, 30);
     assert.strictEqual(g.projection, 'equal-area');
     assert.strictEqual(g.projR, Math.SQRT2);
@@ -212,5 +212,37 @@ describe('computeContours with a precomputed grid', () => {
     const g = densityGrid(cluster, opts);
     const reused = computeContours(cluster, { levels: [2], grid: g });
     assert.deepStrictEqual(reused, fresh);
+  });
+});
+
+describe('Kamb contouring (method: kamb)', () => {
+  const gridMax = g => g.grid.reduce((m, v) => (Number.isFinite(v) && v > m ? v : m), -Infinity);
+
+  it('densityGrid reports method: kamb', () => {
+    assert.strictEqual(densityGrid(cluster, { method: 'kamb', gridSize: 30 }).method, 'kamb');
+  });
+
+  it('a tight cluster yields a higher σ peak than dispersed data', () => {
+    const gc = densityGrid(cluster, { method: 'kamb', gridSize: 36 });
+    const gd = densityGrid(dispersed, { method: 'kamb', gridSize: 36 });
+    assert.ok(gridMax(gc) > gridMax(gd), `cluster ${gridMax(gc)} > dispersed ${gridMax(gd)}`);
+    assert.ok(gridMax(gc) > 2, `cluster peak ${gridMax(gc)} should exceed 2σ`);
+  });
+
+  it('computeContours(method: kamb) returns one entry per σ level with contours', () => {
+    const c = computeContours(cluster, { method: 'kamb', levels: [2, 4], gridSize: 36 });
+    assert.strictEqual(c.length, 2);
+    assert.ok(c[0].paths.length > 0, '2σ contour should be present for a cluster');
+  });
+
+  it('kambSigma changes the counting cone (and the grid)', () => {
+    const a = densityGrid(cluster, { method: 'kamb', kambSigma: 3, gridSize: 30 });
+    const b = densityGrid(cluster, { method: 'kamb', kambSigma: 1, gridSize: 30 });
+    let differs = false;
+    for (let i = 0; i < a.grid.length; i++) {
+      if (Number.isFinite(a.grid[i]) && Number.isFinite(b.grid[i]) &&
+          Math.abs(a.grid[i] - b.grid[i]) > 1e-9) { differs = true; break; }
+    }
+    assert.ok(differs);
   });
 });

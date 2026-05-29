@@ -30,10 +30,18 @@ const DEG = Math.PI / 180;
  * Compute the MUD-normalised density grid (Fisher kernel) in projected space.
  * Shared by computeContours and exposed for raster/heatmap rendering.
  *
+ * Two methods are available via `options.method`:
+ *   - 'fisher' (default): Fisher-kernel density, normalised to multiples of
+ *     uniform density (MUD). Levels are MUD values (≈ 2, 4, 6, 8).
+ *   - 'kamb': Kamb (1959) counting method. Each cell is the count within a
+ *     counting cone (cosθ = n/(n+k²)) expressed in standard deviations above
+ *     the uniform expectation, (count − E)/σ with E = n·A, σ = √(n·A·(1−A)),
+ *     A = 1 − cosθ. `options.kambSigma` sets k (default 3). Levels are σ.
+ *
  * @param {Array<number[]>} dcos - unit vectors (lower hemisphere)
- * @param {Object} options - same projection/rotation/gridSize/sigma as computeContours
- * @returns {{ grid: Float64Array, gridSize: number, step: number, projR: number, projection: string }}
- *   grid[j*gridSize+i] is the MUD value at projected (px = -projR + i*step, py = projR - j*step);
+ * @param {Object} options - projection/rotation/gridSize plus method/sigma/kambSigma
+ * @returns {{ grid: Float64Array, gridSize: number, step: number, projR: number, projection: string, method: string }}
+ *   grid[j*gridSize+i] is the density value at projected (px = -projR + i*step, py = projR - j*step);
  *   cells outside the primitive circle are NaN.
  */
 export function densityGrid(dcos, options = {}) {
@@ -41,6 +49,7 @@ export function densityGrid(dcos, options = {}) {
     projection = 'equal-area',
     rotation = null,
     gridSize = 40,
+    method = 'fisher',
   } = options;
 
   const projR = projection === 'equal-angle' ? 1 : Math.SQRT2;
@@ -48,17 +57,44 @@ export function densityGrid(dcos, options = {}) {
   const grid = new Float64Array(gridSize * gridSize);
 
   const n = dcos.length;
-  if (n === 0) { grid.fill(NaN); return { grid, gridSize, step, projR, projection }; }
+  if (n === 0) { grid.fill(NaN); return { grid, gridSize, step, projR, projection, method }; }
 
-  // Kernel width: default ≈ 90/√n degrees
+  const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
+  // Pre-rotate data into the view frame
+  const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
+
+  if (method === 'kamb') {
+    // Kamb (1959) counting in standard-deviation units.
+    const k = options.kambSigma != null ? options.kambSigma : 3;
+    const cosTheta = n / (n + k * k);               // counting-cone cosine
+    const A = 1 - cosTheta;                          // axial cap area fraction
+    const E = n * A;                                 // expected count (uniform)
+    const sd = Math.sqrt(n * A * (1 - A)) || 1;      // std dev of the count
+
+    for (let j = 0; j < gridSize; j++) {
+      const py = projR - j * step;
+      for (let i = 0; i < gridSize; i++) {
+        const px = -projR + i * step;
+        if (px * px + py * py > projR * projR * 1.02) { grid[j * gridSize + i] = NaN; continue; }
+        const d = inverseFn(px, py);
+        if (!d) { grid[j * gridSize + i] = NaN; continue; }
+
+        let count = 0;
+        for (let m = 0; m < n; m++) {
+          const rd = data[m];
+          // axial: a measurement and its antipode are equivalent
+          if (Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]) >= cosTheta) count++;
+        }
+        grid[j * gridSize + i] = (count - E) / sd;
+      }
+    }
+    return { grid, gridSize, step, projR, projection, method };
+  }
+
+  // Fisher kernel — kernel width default ≈ 90/√n degrees.
   const sigma = (options.sigma != null ? options.sigma : 90 / Math.sqrt(n)) * DEG;
   const cosSigma = Math.cos(sigma);
   const kappa = 1 / (1 - cosSigma);
-
-  const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
-
-  // Pre-rotate data into the view frame
-  const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
 
   for (let j = 0; j < gridSize; j++) {
     const py = projR - j * step;
@@ -74,8 +110,8 @@ export function densityGrid(dcos, options = {}) {
       if (!d) { grid[j * gridSize + i] = NaN; continue; }
 
       let density = 0;
-      for (let k = 0; k < n; k++) {
-        const rd = data[k];
+      for (let m = 0; m < n; m++) {
+        const rd = data[m];
         const dot = d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2];
         density += Math.exp(kappa * (dot - 1));
       }
@@ -85,7 +121,7 @@ export function densityGrid(dcos, options = {}) {
     }
   }
 
-  return { grid, gridSize, step, projR, projection };
+  return { grid, gridSize, step, projR, projection, method };
 }
 
 export function computeContours(dcos, options = {}) {

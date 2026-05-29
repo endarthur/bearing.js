@@ -12,7 +12,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 
 - Equal-area (Schmidt) and equal-angle (Wulff) projections
 - Planes, poles, lines, great circles, small circles
-- Kernel-density contouring (Fisher kernel, multiples-of-uniform-density)
+- Kernel-density contouring — Fisher kernel (multiples-of-uniform-density) or Kamb (1959) counting (σ)
 - Eigenvalue decomposition, Woodcock and Vollmer fabric parameters, Bingham statistics
 - Confidence regions: Fisher cone of confidence + eigenvector confidence ellipses
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
@@ -131,7 +131,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-341 tests using Node.js built-in test runner.
+345 tests using Node.js built-in test runner.
 
 ## License
 
