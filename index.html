@@ -1560,6 +1560,7 @@ var bearing = (() => {
     computeContours: () => computeContours,
     conversions: () => conversions_exports,
     curves: () => curves_exports,
+    densityGrid: () => densityGrid,
     equalAngle: () => equal_angle_exports,
     equalArea: () => equal_area_exports,
     generateNet: () => generateNet,
@@ -2175,23 +2176,25 @@ var bearing = (() => {
 
   // src/contouring.js
   var DEG2 = Math.PI / 180;
-  function computeContours(dcos, options = {}) {
+  function densityGrid(dcos, options = {}) {
     const {
       projection = "equal-area",
       rotation = null,
-      gridSize = 40,
-      levels = [2, 4, 6, 8]
+      gridSize = 40
     } = options;
+    const projR = projection === "equal-angle" ? 1 : Math.SQRT2;
+    const step = 2 * projR / (gridSize - 1);
+    const grid = new Float64Array(gridSize * gridSize);
     const n = dcos.length;
-    if (n === 0) return levels.map((level) => ({ level, paths: [] }));
+    if (n === 0) {
+      grid.fill(NaN);
+      return { grid, gridSize, step, projR, projection };
+    }
     const sigma = (options.sigma != null ? options.sigma : 90 / Math.sqrt(n)) * DEG2;
     const cosSigma = Math.cos(sigma);
     const kappa = 1 / (1 - cosSigma);
     const inverseFn = projection === "equal-angle" ? inverse2 : inverse;
-    const projR = projection === "equal-angle" ? 1 : Math.SQRT2;
     const data = rotation ? dcos.map((d) => transformVec3(rotation, d)) : dcos;
-    const grid = new Float64Array(gridSize * gridSize);
-    const step = 2 * projR / (gridSize - 1);
     for (let j = 0; j < gridSize; j++) {
       const py = projR - j * step;
       for (let i = 0; i < gridSize; i++) {
@@ -2214,6 +2217,12 @@ var bearing = (() => {
         grid[j * gridSize + i] = kappa * density / n;
       }
     }
+    return { grid, gridSize, step, projR, projection };
+  }
+  function computeContours(dcos, options = {}) {
+    const { levels = [2, 4, 6, 8] } = options;
+    if (dcos.length === 0) return levels.map((level) => ({ level, paths: [] }));
+    const { grid, gridSize, step, projR } = densityGrid(dcos, options);
     return levels.map((level) => ({
       level,
       paths: assembleSegments(
@@ -2482,6 +2491,46 @@ var bearing = (() => {
       const s = this._scale;
       return [c + px * s, c - py * s];
     }
+    /**
+     * Inverse of the full forward pipeline: SVG pixel → geographic unit vector.
+     * Accounts for the pixel transform, the projection, and the current rotation.
+     * @param {number} sx - x in SVG/viewBox coordinates
+     * @param {number} sy - y in SVG/viewBox coordinates
+     * @returns {number[]|null} geographic direction cosine [x,y,z] (z<=0), or null if outside the net
+     */
+    unproject(sx, sy) {
+      let px = (sx - this._center) / this._scale;
+      let py = (this._center - sy) / this._scale;
+      const lim = this.projection === "equal-angle" ? 1 : 2;
+      const r2 = px * px + py * py;
+      if (r2 >= lim) {
+        if (r2 > lim * 1.01) return null;
+        const k = Math.sqrt(lim * (1 - 1e-9) / r2);
+        px *= k;
+        py *= k;
+      }
+      const inverseFn = this.projection === "equal-angle" ? inverse2 : inverse;
+      const d = inverseFn(px, py);
+      if (!d) return null;
+      return this.rotation ? transformVec3(transpose(this.rotation), d) : d;
+    }
+    /**
+     * Forward pipeline: geographic unit vector → SVG pixel coordinates.
+     * Mirror of unproject(). Applies the current rotation, projection, and pixel transform.
+     * @param {number[]} dcos - geographic direction cosine [x,y,z]
+     * @returns {{x:number,y:number,upper:boolean}} SVG coords; `upper` is true when the
+     *   rotated point falls on the upper hemisphere (not shown on the lower-hemisphere net).
+     */
+    project(dcos) {
+      const d = this._rotate(dcos);
+      const [px, py] = this._projectFn(d);
+      const [x, y] = this._toSvg(px, py);
+      return { x, y, upper: d[2] > 1e-9 };
+    }
+    /** Convenience: project a trend/plunge line directly to SVG coords. */
+    projectLine(trend, plunge) {
+      return this.project(lineToDcos(trend, plunge));
+    }
     /** Resolve style for a category using the three-level cascade. */
     _resolveCategory(category, itemStyle) {
       return resolveStyle(category, this._instanceStyle, itemStyle);
@@ -2552,6 +2601,20 @@ var bearing = (() => {
      */
     cone(trend, plunge, halfAngle, style = {}) {
       this._items.push({ type: "cone", trend, plunge, halfAngle, style, _el: null });
+      return this;
+    }
+    /**
+     * Plot a text label anchored at a trend/plunge direction (treated like a line/point).
+     * Style supports: dx, dy (pixel offset from the anchor), fill, fontSize, fontFamily,
+     * fontWeight, textAnchor ('start'|'middle'|'end'), and class.
+     * @param {number} trend - trend in degrees
+     * @param {number} plunge - plunge in degrees
+     * @param {string} content - label text
+     * @param {Object} [style]
+     * @returns {this}
+     */
+    text(trend, plunge, content, style = {}) {
+      this._items.push({ type: "text", trend, plunge, content: String(content), style, _el: null });
       return this;
     }
     /**
@@ -2804,6 +2867,23 @@ var bearing = (() => {
           }
           break;
         }
+        case "text": {
+          const dcos = lineToDcos(item.trend, item.plunge);
+          const d = this._rotate(dcos);
+          if (d[2] > 1e-9) break;
+          const [px, py] = this._projectFn(d);
+          const [sx, sy] = this._toSvg(px, py);
+          const st = item.style || {};
+          svg.text(sx + (st.dx || 0), sy + (st.dy || 0), item.content, {
+            fill: st.fill || "#000",
+            "font-size": st.fontSize || 11,
+            "font-family": st.fontFamily || "sans-serif",
+            "font-weight": st.fontWeight || 400,
+            "text-anchor": st.textAnchor || "start",
+            class: this._classFor("text", st.class)
+          });
+          break;
+        }
       }
     }
     // ---------------------------------------------------------------------------
@@ -3017,6 +3097,35 @@ var bearing = (() => {
             fill: "none",
             "stroke-dasharray": s.strokeDasharray
           });
+          break;
+        }
+        case "text": {
+          const dcos = lineToDcos(item.trend, item.plunge);
+          const d = this._rotate(dcos);
+          const st = item.style || {};
+          if (!item._el) {
+            item._el = document.createElementNS(SVG_NS, "text");
+            setAttrs(item._el, { class: this._classFor("text", st.class) });
+            this._dataGroup.appendChild(item._el);
+          }
+          if (d[2] > 1e-9) {
+            setAttrs(item._el, { display: "none" });
+            item._el.textContent = item.content;
+            break;
+          }
+          const [px, py] = this._projectFn(d);
+          const [sx, sy] = this._toSvg(px, py);
+          setAttrs(item._el, {
+            display: "",
+            x: sx + (st.dx || 0),
+            y: sy + (st.dy || 0),
+            fill: st.fill || "#000",
+            "font-size": st.fontSize || 11,
+            "font-family": st.fontFamily || "sans-serif",
+            "font-weight": st.fontWeight || 400,
+            "text-anchor": st.textAnchor || "start"
+          });
+          item._el.textContent = item.content;
           break;
         }
       }

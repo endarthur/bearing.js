@@ -24,16 +24,29 @@ const DEG = Math.PI / 180;
  * @returns {Array<{ level: number, paths: number[][][] }>}
  *   paths in **projected** coordinates [px, py]
  */
-export function computeContours(dcos, options = {}) {
+/**
+ * Compute the MUD-normalised density grid (Fisher kernel) in projected space.
+ * Shared by computeContours and exposed for raster/heatmap rendering.
+ *
+ * @param {Array<number[]>} dcos - unit vectors (lower hemisphere)
+ * @param {Object} options - same projection/rotation/gridSize/sigma as computeContours
+ * @returns {{ grid: Float64Array, gridSize: number, step: number, projR: number, projection: string }}
+ *   grid[j*gridSize+i] is the MUD value at projected (px = -projR + i*step, py = projR - j*step);
+ *   cells outside the primitive circle are NaN.
+ */
+export function densityGrid(dcos, options = {}) {
   const {
     projection = 'equal-area',
     rotation = null,
     gridSize = 40,
-    levels = [2, 4, 6, 8],
   } = options;
 
+  const projR = projection === 'equal-angle' ? 1 : Math.SQRT2;
+  const step = 2 * projR / (gridSize - 1);
+  const grid = new Float64Array(gridSize * gridSize);
+
   const n = dcos.length;
-  if (n === 0) return levels.map(level => ({ level, paths: [] }));
+  if (n === 0) { grid.fill(NaN); return { grid, gridSize, step, projR, projection }; }
 
   // Kernel width: default ≈ 90/√n degrees
   const sigma = (options.sigma != null ? options.sigma : 90 / Math.sqrt(n)) * DEG;
@@ -41,14 +54,9 @@ export function computeContours(dcos, options = {}) {
   const kappa = 1 / (1 - cosSigma);
 
   const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
-  const projR = projection === 'equal-angle' ? 1 : Math.SQRT2;
 
   // Pre-rotate data into the view frame
   const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
-
-  // --- density grid ----------------------------------------------------------
-  const grid = new Float64Array(gridSize * gridSize);
-  const step = 2 * projR / (gridSize - 1);
 
   for (let j = 0; j < gridSize; j++) {
     const py = projR - j * step;
@@ -74,6 +82,15 @@ export function computeContours(dcos, options = {}) {
       grid[j * gridSize + i] = kappa * density / n;
     }
   }
+
+  return { grid, gridSize, step, projR, projection };
+}
+
+export function computeContours(dcos, options = {}) {
+  const { levels = [2, 4, 6, 8] } = options;
+  if (dcos.length === 0) return levels.map(level => ({ level, paths: [] }));
+
+  const { grid, gridSize, step, projR } = densityGrid(dcos, options);
 
   // --- marching squares at each level ----------------------------------------
   return levels.map(level => ({

@@ -6,8 +6,8 @@ import { planeToDcos, lineToDcos } from './core/conversions.js';
 import * as curves from './core/curves.js';
 import * as vec3 from './core/vec3.js';
 import * as mat3 from './core/mat3.js';
-import { project as equalAreaProject } from './projections/equal-area.js';
-import { project as equalAngleProject } from './projections/equal-angle.js';
+import { project as equalAreaProject, inverse as equalAreaInverse } from './projections/equal-area.js';
+import { project as equalAngleProject, inverse as equalAngleInverse } from './projections/equal-angle.js';
 import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
 import { defaults, resolveStyle } from './render/style.js';
@@ -189,6 +189,52 @@ export class Stereonet {
     return [c + px * s, c - py * s];
   }
 
+  /**
+   * Inverse of the full forward pipeline: SVG pixel → geographic unit vector.
+   * Accounts for the pixel transform, the projection, and the current rotation.
+   * @param {number} sx - x in SVG/viewBox coordinates
+   * @param {number} sy - y in SVG/viewBox coordinates
+   * @returns {number[]|null} geographic direction cosine [x,y,z] (z<=0), or null if outside the net
+   */
+  unproject(sx, sy) {
+    let px = (sx - this._center) / this._scale;
+    let py = (this._center - sy) / this._scale;
+    // The projection inverse rejects r² above a literal ceiling (2 for equal-area,
+    // 1 for equal-angle). A rim point (e.g. a dip-90 pole) lands at exactly that
+    // ceiling and float error tips it over, so clamp strictly inside before inverting.
+    const lim = this.projection === 'equal-angle' ? 1 : 2;
+    const r2 = px * px + py * py;
+    if (r2 >= lim) {
+      if (r2 > lim * 1.01) return null;          // genuinely outside the net
+      const k = Math.sqrt((lim * (1 - 1e-9)) / r2);
+      px *= k; py *= k;
+    }
+    const inverseFn = this.projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
+    const d = inverseFn(px, py);                  // view-frame unit vector, lower hemisphere
+    if (!d) return null;
+    // Undo the view rotation: geographic = Rᵀ · d  (rotation is orthonormal)
+    return this.rotation ? mat3.transformVec3(mat3.transpose(this.rotation), d) : d;
+  }
+
+  /**
+   * Forward pipeline: geographic unit vector → SVG pixel coordinates.
+   * Mirror of unproject(). Applies the current rotation, projection, and pixel transform.
+   * @param {number[]} dcos - geographic direction cosine [x,y,z]
+   * @returns {{x:number,y:number,upper:boolean}} SVG coords; `upper` is true when the
+   *   rotated point falls on the upper hemisphere (not shown on the lower-hemisphere net).
+   */
+  project(dcos) {
+    const d = this._rotate(dcos);
+    const [px, py] = this._projectFn(d);
+    const [x, y] = this._toSvg(px, py);
+    return { x, y, upper: d[2] > 1e-9 };
+  }
+
+  /** Convenience: project a trend/plunge line directly to SVG coords. */
+  projectLine(trend, plunge) {
+    return this.project(lineToDcos(trend, plunge));
+  }
+
   /** Resolve style for a category using the three-level cascade. */
   _resolveCategory(category, itemStyle) {
     return resolveStyle(category, this._instanceStyle, itemStyle);
@@ -271,6 +317,21 @@ export class Stereonet {
    */
   cone(trend, plunge, halfAngle, style = {}) {
     this._items.push({ type: 'cone', trend, plunge, halfAngle, style, _el: null });
+    return this;
+  }
+
+  /**
+   * Plot a text label anchored at a trend/plunge direction (treated like a line/point).
+   * Style supports: dx, dy (pixel offset from the anchor), fill, fontSize, fontFamily,
+   * fontWeight, textAnchor ('start'|'middle'|'end'), and class.
+   * @param {number} trend - trend in degrees
+   * @param {number} plunge - plunge in degrees
+   * @param {string} content - label text
+   * @param {Object} [style]
+   * @returns {this}
+   */
+  text(trend, plunge, content, style = {}) {
+    this._items.push({ type: 'text', trend, plunge, content: String(content), style, _el: null });
     return this;
   }
 
@@ -554,6 +615,23 @@ export class Stereonet {
         }
         break;
       }
+      case 'text': {
+        const dcos = lineToDcos(item.trend, item.plunge);
+        const d = this._rotate(dcos);
+        if (d[2] > 1e-9) break;                       // upper hemisphere: hide
+        const [px, py] = this._projectFn(d);
+        const [sx, sy] = this._toSvg(px, py);
+        const st = item.style || {};
+        svg.text(sx + (st.dx || 0), sy + (st.dy || 0), item.content, {
+          fill: st.fill || '#000',
+          'font-size': st.fontSize || 11,
+          'font-family': st.fontFamily || 'sans-serif',
+          'font-weight': st.fontWeight || 400,
+          'text-anchor': st.textAnchor || 'start',
+          class: this._classFor('text', st.class),
+        });
+        break;
+      }
     }
   }
 
@@ -798,6 +876,34 @@ export class Stereonet {
           fill: 'none',
           'stroke-dasharray': s.strokeDasharray,
         });
+        break;
+      }
+      case 'text': {
+        const dcos = lineToDcos(item.trend, item.plunge);
+        const d = this._rotate(dcos);
+        const st = item.style || {};
+        if (!item._el) {
+          item._el = document.createElementNS(SVG_NS, 'text');
+          setAttrs(item._el, { class: this._classFor('text', st.class) });
+          this._dataGroup.appendChild(item._el);
+        }
+        if (d[2] > 1e-9) {                            // upper hemisphere: hide
+          setAttrs(item._el, { display: 'none' });
+          item._el.textContent = item.content;
+          break;
+        }
+        const [px, py] = this._projectFn(d);
+        const [sx, sy] = this._toSvg(px, py);
+        setAttrs(item._el, {
+          display: '',
+          x: sx + (st.dx || 0), y: sy + (st.dy || 0),
+          fill: st.fill || '#000',
+          'font-size': st.fontSize || 11,
+          'font-family': st.fontFamily || 'sans-serif',
+          'font-weight': st.fontWeight || 400,
+          'text-anchor': st.textAnchor || 'start',
+        });
+        item._el.textContent = item.content;
         break;
       }
     }

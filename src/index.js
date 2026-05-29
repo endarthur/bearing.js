@@ -11,7 +11,7 @@ export * as equalAngle from './projections/equal-angle.js';
 
 export * as statistics from './statistics.js';
 export { symmetricEigen3 } from './core/eigen.js';
-export { computeContours } from './contouring.js';
+export { computeContours, densityGrid } from './contouring.js';
 
 export { SvgBuilder } from './render/svg.js';
 export { generateNet, cardinalPoints } from './render/net.js';
