@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   resultant, meanVector, fisherStats,
   orientationTensor, principalAxes,
+  confidenceCone, confidenceEllipse,
 } from '../src/statistics.js';
 import { planeToDcos, lineToDcos } from '../src/core/conversions.js';
 import * as vec3 from '../src/core/vec3.js';
@@ -274,5 +275,66 @@ describe('principalAxes', () => {
     // With only 3 orthogonal vectors, eigenvalues are ~1/3 each, so kappas ≈ 0
     assertClose(kappa1, 0, 'kappa1 near 0 for uniform', 0.5);
     assertClose(kappa2, 0, 'kappa2 near 0 for uniform', 0.5);
+  });
+});
+
+const adot = (a, b) => Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+
+describe('confidenceCone', () => {
+  const cluster = [];
+  for (let t = 0; t < 360; t += 30) cluster.push(lineToDcos(t, 75));
+
+  it('halfAngle equals alpha95 at confidence 0.95', () => {
+    const { alpha95 } = fisherStats(cluster);
+    assertClose(confidenceCone(cluster, 0.95).halfAngle, alpha95, 'cone == alpha95', 1e-9);
+  });
+
+  it('higher confidence gives a wider cone', () => {
+    assert.ok(confidenceCone(cluster, 0.99).halfAngle > confidenceCone(cluster, 0.95).halfAngle);
+  });
+
+  it('returns the mean as [trend, plunge]', () => {
+    const { mean } = confidenceCone(cluster);
+    assert.strictEqual(mean.length, 2);
+  });
+});
+
+describe('confidenceEllipse', () => {
+  // A cluster spread unevenly about ~120/40 so the ellipse is non-circular.
+  const cluster = [];
+  for (let i = 0; i < 49; i++) {
+    cluster.push(lineToDcos(120 + ((i % 7) - 3) * 4, 40 + (Math.floor(i / 7) - 3) * 2));
+  }
+
+  it('a >= b and both are positive', () => {
+    const e = confidenceEllipse(cluster);
+    assert.ok(e.a >= e.b, `a(${e.a}) >= b(${e.b})`);
+    assert.ok(e.b > 0);
+  });
+
+  it('centres on V1 for about:max (cluster mean)', () => {
+    const { eigenvectors } = principalAxes(cluster);
+    const e = confidenceEllipse(cluster, { about: 'max' });
+    assertClose(adot(e.centerDir, eigenvectors[0]), 1, 'centre == V1', 1e-9);
+  });
+
+  it('centres on V3 for about:min (girdle pole)', () => {
+    const { eigenvectors } = principalAxes(cluster);
+    const e = confidenceEllipse(cluster, { about: 'min' });
+    assertClose(adot(e.centerDir, eigenvectors[2]), 1, 'centre == V3', 1e-9);
+  });
+
+  it('shrinks as sample size grows (∝ 1/√N)', () => {
+    const small = confidenceEllipse(cluster);
+    const big = confidenceEllipse(cluster.concat(cluster, cluster, cluster)); // 4× data, same tensor
+    assert.ok(big.a < small.a, `big a(${big.a}) < small a(${small.a})`);
+    assertClose(big.a, small.a / 2, '4× sample halves the semi-axis', small.a * 0.05);
+  });
+
+  it('higher confidence widens the ellipse', () => {
+    assert.ok(
+      confidenceEllipse(cluster, { confidence: 0.99 }).a >
+      confidenceEllipse(cluster, { confidence: 0.95 }).a,
+    );
   });
 });

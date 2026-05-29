@@ -74,4 +74,42 @@ describe('curves', () => {
       assert.strictEqual(curves.planeIntersection([1, 0, 0], [-1, 0, 0]), null);
     });
   });
+
+  describe('ellipse', () => {
+    const axis = vec3.normalize([0, 0, -1]);   // straight down
+    const major = [1, 0, 0];                    // major axis toward +x
+
+    it('all points lie on the unit sphere', () => {
+      for (const p of curves.ellipse(axis, major, 0.5, 0.2, 60)) {
+        approx(vec3.length(p), 1, `point ${p} not on unit sphere`);
+      }
+    });
+
+    it('reduces to a small circle when semi-axes are equal', () => {
+      const a = 0.3;
+      for (const p of curves.ellipse(axis, major, a, a, 60)) {
+        approx(vec3.angle(axis, p), a, 'all points at radius a');
+      }
+    });
+
+    it('all points lie between the minor and major angular radii', () => {
+      const A = 0.5, B = 0.2;
+      for (const p of curves.ellipse(axis, major, A, B, 120)) {
+        const ang = vec3.angle(axis, p);
+        assert.ok(ang <= A + EPSILON && ang >= B - EPSILON, `ang ${ang} outside [${B}, ${A}]`);
+      }
+    });
+
+    it('reaches semiMajor toward majorDir at phi=0', () => {
+      const pts = curves.ellipse(axis, major, 0.5, 0.2, 120);
+      approx(vec3.angle(axis, pts[0]), 0.5, 'phi=0 at semiMajor');
+      assert.ok(pts[0][0] > 0, 'phi=0 point displaced toward +x');
+    });
+
+    it('is closed (last point equals first)', () => {
+      const pts = curves.ellipse(axis, major, 0.4, 0.25, 40);
+      const a = pts[0], b = pts[pts.length - 1];
+      approx(a[0], b[0]); approx(a[1], b[1]); approx(a[2], b[2]);
+    });
+  });
 });

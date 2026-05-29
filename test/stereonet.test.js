@@ -575,6 +575,31 @@ describe('Stereonet layout accessor', () => {
   });
 });
 
+describe('Stereonet ellipse & confidence regions', () => {
+  const cluster = [];
+  for (let t = 0; t < 360; t += 20) cluster.push(lineToDcos(t, 70));
+
+  it('ellipse() is chainable and renders a classed polyline', () => {
+    const sn = new Stereonet({ size: 300 });
+    assert.strictEqual(sn.ellipse([0, 0, -1], [1, 0, 0], 20, 10), sn);
+    assert.ok(sn.svg().includes('class="bearing-ellipse"'));
+  });
+
+  it('confidenceEllipse() adds one ellipse item and draws it', () => {
+    const sn = new Stereonet({ size: 300 }).confidenceEllipse(cluster);
+    assert.strictEqual(sn.items.length, 1);
+    assert.strictEqual(sn.items[0].type, 'ellipse');
+    assert.ok(sn.svg().includes('bearing-ellipse'));
+  });
+
+  it('ellipse renders as multiple polyline points', () => {
+    const plain = (new Stereonet({ size: 300 }).svg().match(/<polyline/g) || []).length;
+    const withEllipse = (new Stereonet({ size: 300 })
+      .ellipse([0, 0, -1], [1, 0, 0], 25, 15).svg().match(/<polyline/g) || []).length;
+    assert.ok(withEllipse > plain);
+  });
+});
+
 describe('Stereonet heatmap layer', () => {
   const cluster = [];
   for (let t = 0; t < 360; t += 15) cluster.push(lineToDcos(t, 80));

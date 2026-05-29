@@ -55,6 +55,43 @@ export function smallCircle(axis, halfAngle, nPoints = 180) {
 }
 
 /**
+ * Generate points along an elliptical "small circle" on the unit sphere, centred
+ * on `axis`, with angular semi-axes `semiMajor` and `semiMinor` (radians). The
+ * major axis points toward the component of `majorDir` perpendicular to `axis`.
+ * Reduces to smallCircle() when semiMajor === semiMinor. Returns [x,y,z] points.
+ */
+export function ellipse(axis, majorDir, semiMajor, semiMinor, nPoints = 120) {
+  const a = vec3.normalize(axis);
+  // u: tangent direction of the major axis (perpendicular component of majorDir)
+  let u = vec3.sub(majorDir, vec3.scale(a, vec3.dot(majorDir, a)));
+  if (vec3.length(u) < 1e-10) {
+    const ref = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    u = vec3.cross(a, ref);
+  }
+  u = vec3.normalize(u);
+  const w = vec3.cross(a, u); // unit, completes the right-handed tangent basis
+
+  const step = (2 * Math.PI) / nPoints;
+  const points = [];
+  for (let i = 0; i <= nPoints; i++) {
+    const phi = i * step;
+    const cp = Math.cos(phi), sp = Math.sin(phi);
+    // Polar form of an ellipse with semi-axes (semiMajor along u, semiMinor along w):
+    // angular radius rho(phi) = a·b / sqrt(b²cos²φ + a²sin²φ).
+    const denom = Math.sqrt(
+      semiMinor * semiMinor * cp * cp + semiMajor * semiMajor * sp * sp,
+    );
+    const rho = denom > 1e-12 ? (semiMajor * semiMinor) / denom : 0;
+    const cr = Math.cos(rho), sr = Math.sin(rho);
+    const t0 = u[0] * cp + w[0] * sp;
+    const t1 = u[1] * cp + w[1] * sp;
+    const t2 = u[2] * cp + w[2] * sp;
+    points.push([a[0] * cr + t0 * sr, a[1] * cr + t1 * sr, a[2] * cr + t2 * sr]);
+  }
+  return points;
+}
+
+/**
  * Arc on the unit sphere from vector a to vector b, by angle.
  */
 export function arc(a, b, nPoints = 60) {

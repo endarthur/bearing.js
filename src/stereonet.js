@@ -12,6 +12,7 @@ import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
 import { defaults, resolveStyle } from './render/style.js';
 import { computeContours, densityGrid } from './contouring.js';
+import { confidenceEllipse as computeConfidenceEllipse } from './statistics.js';
 
 const DEG = Math.PI / 180;
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -399,6 +400,37 @@ export class Stereonet {
   cone(trend, plunge, halfAngle, style = {}) {
     this._items.push({ type: 'cone', trend, plunge, halfAngle, style, _el: null });
     return this;
+  }
+
+  /**
+   * Plot an elliptical "small circle" centred on a direction, with angular
+   * semi-axes in degrees. The major axis points toward `majorDir`.
+   * @param {number[]} centerDir - centre direction cosine [x,y,z]
+   * @param {number[]} majorDir - direction the major axis points toward [x,y,z]
+   * @param {number} semiMajorDeg - major angular semi-axis (degrees)
+   * @param {number} semiMinorDeg - minor angular semi-axis (degrees)
+   * @param {Object} [style]
+   * @returns {this}
+   */
+  ellipse(centerDir, majorDir, semiMajorDeg, semiMinorDeg, style = {}) {
+    this._items.push({
+      type: 'ellipse', centerDir, majorDir,
+      aRad: semiMajorDeg * DEG, bRad: semiMinorDeg * DEG,
+      style, _el: null,
+    });
+    return this;
+  }
+
+  /**
+   * Plot the confidence ellipse about a principal eigenvector of `dcos`
+   * (see statistics.confidenceEllipse). Convenience over ellipse().
+   * @param {Array<number[]>} dcos - unit vectors (lower hemisphere)
+   * @param {Object} [options] - confidence/about (statistics) plus { style }
+   * @returns {this}
+   */
+  confidenceEllipse(dcos, options = {}) {
+    const e = computeConfidenceEllipse(dcos, options);
+    return this.ellipse(e.centerDir, e.majorDir, e.a, e.b, options.style || {});
   }
 
   /**
@@ -799,6 +831,22 @@ export class Stereonet {
         }
         break;
       }
+      case 'ellipse': {
+        const pts3d = curves.ellipse(item.centerDir, item.majorDir, item.aRad, item.bRad);
+        const s = this._resolveCategory('ellipse', item.style);
+        for (const seg of this._projectCurve(pts3d)) {
+          if (seg.length > 1) {
+            svg.polyline(seg, {
+              stroke: s.stroke,
+              'stroke-width': s.strokeWidth,
+              fill: s.fill,
+              'stroke-dasharray': s.strokeDasharray,
+              class: this._classFor('ellipse', item.style.class),
+            });
+          }
+        }
+        break;
+      }
       case 'text': {
         const dcos = lineToDcos(item.trend, item.plunge);
         const d = this._rotate(dcos);
@@ -1065,6 +1113,24 @@ export class Stereonet {
           stroke: s.stroke,
           'stroke-width': s.strokeWidth,
           fill: 'none',
+          'stroke-dasharray': s.strokeDasharray,
+        });
+        break;
+      }
+      case 'ellipse': {
+        const pts3d = curves.ellipse(item.centerDir, item.majorDir, item.aRad, item.bRad);
+        const d = segmentsToPathD(this._projectCurve(pts3d));
+        const s = this._resolveCategory('ellipse', item.style);
+        if (!item._el) {
+          item._el = document.createElementNS(SVG_NS, 'path');
+          setAttrs(item._el, { class: this._classFor('ellipse', item.style.class) });
+          this._dataGroup.appendChild(item._el);
+        }
+        setAttrs(item._el, {
+          d,
+          stroke: s.stroke,
+          'stroke-width': s.strokeWidth,
+          fill: s.fill,
           'stroke-dasharray': s.strokeDasharray,
         });
         break;

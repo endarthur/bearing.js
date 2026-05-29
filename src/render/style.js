@@ -106,4 +106,10 @@ export const defaults = {
     fill: 'none',
     strokeDasharray: '4,3',
   },
+  ellipse: {
+    stroke: '#000000',
+    strokeWidth: 1,
+    fill: 'none',
+    strokeDasharray: '4,3',
+  },
 };

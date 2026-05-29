@@ -8,6 +8,9 @@
 
 import * as vec3 from './core/vec3.js';
 import { symmetricEigen3 } from './core/eigen.js';
+import { dcosToLine } from './core/conversions.js';
+
+const RAD2DEG = 180 / Math.PI;
 
 // ---------------------------------------------------------------------------
 //  Basic descriptive statistics
@@ -71,6 +74,31 @@ export function fisherStats(dcos) {
   }
 
   return { n, R, Rbar, mean, kappa, alpha95 };
+}
+
+/**
+ * Fisher cone of confidence about the mean direction, for an arbitrary
+ * confidence level. Generalises fisherStats().alpha95 (which it equals at
+ * confidence = 0.95).
+ *
+ * @param {Array<number[]>} dcos
+ * @param {number} [confidence=0.95] - e.g. 0.95, 0.99
+ * @returns {{ mean: [number, number], halfAngle: number, confidence: number }}
+ *   mean as [trend, plunge] in degrees; halfAngle in degrees (0 if undefined).
+ */
+export function confidenceCone(dcos, confidence = 0.95) {
+  const n = dcos.length;
+  const res = resultant(dcos);
+  const R = vec3.length(res);
+  const meanVec = R > 1e-10 ? vec3.scale(res, 1 / R) : [0, 0, -1];
+
+  let halfAngle = 0;
+  if (n >= 2 && R > 1e-10 && n - R > 1e-10) {
+    const p = 1 - confidence;
+    const cosA = 1 - ((n - R) / R) * (Math.pow(1 / p, 1 / (n - 1)) - 1);
+    halfAngle = Math.acos(Math.max(-1, Math.min(1, cosA))) * RAD2DEG;
+  }
+  return { mean: dcosToLine(meanVec), halfAngle, confidence };
 }
 
 // ---------------------------------------------------------------------------
@@ -149,4 +177,54 @@ export function principalAxes(dcos) {
   const kappa2 = n * (s3 - s1);
 
   return { eigenvalues: values, eigenvectors: vectors, K, C, P, G, R, kappa1, kappa2 };
+}
+
+/**
+ * Confidence ellipse about a principal eigenvector of the orientation tensor.
+ *
+ * Uses the asymptotic eigenvector standard error (Jupp & Kent): the angular
+ * standard error between the estimated and true eigenvector i, measured toward
+ * eigenvector j, is σ_ij = √( λᵢλⱼ / (N (λᵢ − λⱼ)²) ). The confidence semi-axis
+ * is √(χ²₂) · σ_ij with the 2-DOF χ² quantile χ²₂ = −2·ln(1 − confidence).
+ * Approximate — assumes a large sample and a well-separated eigenvalue.
+ *
+ * @param {Array<number[]>} dcos
+ * @param {Object} [options]
+ * @param {number} [options.confidence=0.95]
+ * @param {'max'|'min'} [options.about='max'] - centre on V1 (cluster mean) or V3 (girdle pole)
+ * @returns {{ center:[number,number], azimuth:[number,number], a:number, b:number,
+ *             centerDir:number[], majorDir:number[], minorDir:number[], confidence:number }}
+ *   center/azimuth as [trend,plunge] degrees; a ≥ b are angular semi-axes in
+ *   degrees (clamped to 90°); *Dir are the unit eigenvectors.
+ */
+export function confidenceEllipse(dcos, options = {}) {
+  const confidence = options.confidence != null ? options.confidence : 0.95;
+  const about = options.about || 'max';
+  const n = dcos.length;
+  const { eigenvalues, eigenvectors } = principalAxes(dcos);
+
+  const ci = about === 'min' ? 2 : 0;             // centre eigenvector index
+  const others = [0, 1, 2].filter(k => k !== ci);
+  const chi2 = -2 * Math.log(1 - confidence);
+  const li = eigenvalues[ci];
+
+  const semi = others.map(j => {
+    const lj = eigenvalues[j];
+    const denom = (li - lj) * (li - lj);
+    const variance = denom > 1e-12 ? chi2 * (li * lj) / (n * denom) : Infinity;
+    return { j, angle: Math.min(Math.PI / 2, Math.sqrt(variance)) };
+  });
+  semi.sort((p, q) => q.angle - p.angle);         // major first
+  const [major, minor] = semi;
+
+  return {
+    center: dcosToLine(eigenvectors[ci]),
+    azimuth: dcosToLine(eigenvectors[major.j]),
+    a: major.angle * RAD2DEG,
+    b: minor.angle * RAD2DEG,
+    centerDir: eigenvectors[ci],
+    majorDir: eigenvectors[major.j],
+    minorDir: eigenvectors[minor.j],
+    confidence,
+  };
 }
