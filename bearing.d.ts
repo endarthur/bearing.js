@@ -211,6 +211,12 @@ export namespace statistics {
   function confidenceEllipse(dcos: Dcos[], options?: ConfidenceEllipseOptions): ConfidenceEllipseResult;
   function uniformityTest(dcos: Dcos[]): UniformityTest;
   function commonMeanTest(a: Dcos[], b: Dcos[]): CommonMeanTest;
+  function bootstrapMeanConfidence(dcos: Dcos[], options?: {
+    confidence?: number; iterations?: number; rng?: () => number;
+  }): { mean: Attitude; meanDir: Dcos; halfAngle: number; confidence: number; iterations: number };
+  function bootstrapEigenvectorConfidence(dcos: Dcos[], options?: {
+    confidence?: number; about?: 'max' | 'min'; iterations?: number; rng?: () => number;
+  }): ConfidenceEllipseResult & { iterations: number };
 }
 
 export interface CircularOptions { axial?: boolean; }

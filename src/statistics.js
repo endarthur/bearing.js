@@ -278,3 +278,127 @@ export function confidenceEllipse(dcos, options = {}) {
     confidence,
   };
 }
+
+// ---------------------------------------------------------------------------
+//  Bootstrap (non-parametric) confidence regions
+// ---------------------------------------------------------------------------
+
+// Tangent-plane basis (u, w) at a unit vector `a`.
+function tangentBasis(a) {
+  const ref = Math.abs(a[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+  const u = vec3.normalize(vec3.cross(a, ref));
+  return [u, vec3.cross(a, u)];
+}
+
+// Resample-with-replacement index helper.
+function resample(arr, rng) {
+  const n = arr.length;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) out[i] = arr[(rng() * n) | 0];
+  return out;
+}
+
+/**
+ * Non-parametric bootstrap confidence cone for the mean direction. Resamples the
+ * data with replacement, recomputes the mean each iteration, and takes the
+ * `confidence` quantile of the angular deviation from the full-sample mean as
+ * the cone half-angle. Assumption-light alternative to the Fisher α₉₅.
+ *
+ * @param {Array<number[]>} dcos
+ * @param {Object} [options]
+ * @param {number} [options.confidence=0.95]
+ * @param {number} [options.iterations=1000]
+ * @param {()=>number} [options.rng=Math.random] - uniform [0,1) source (inject for determinism)
+ * @returns {{ mean:[number,number], meanDir:number[], halfAngle:number, confidence:number, iterations:number }}
+ */
+export function bootstrapMeanConfidence(dcos, options = {}) {
+  const confidence = options.confidence != null ? options.confidence : 0.95;
+  const iterations = options.iterations || 1000;
+  const rng = options.rng || Math.random;
+  const mean0 = meanVector(dcos);
+
+  const angles = [];
+  for (let it = 0; it < iterations; it++) {
+    const m = meanVector(resample(dcos, rng));
+    let d = m[0] * mean0[0] + m[1] * mean0[1] + m[2] * mean0[2];
+    if (d < 0) d = -d;                       // axial safety
+    angles.push(Math.acos(Math.max(-1, Math.min(1, d))));
+  }
+  angles.sort((x, y) => x - y);
+  const idx = Math.min(angles.length - 1, Math.floor(confidence * angles.length));
+  return {
+    mean: dcosToLine(mean0),
+    meanDir: mean0,
+    halfAngle: angles[idx] * RAD2DEG,
+    confidence,
+    iterations,
+  };
+}
+
+/**
+ * Non-parametric bootstrap confidence ellipse about a principal eigenvector.
+ * Resamples, recomputes the eigenvector each iteration, and fits a Gaussian in
+ * the tangent plane at the full-sample eigenvector; semi-axes are √(χ²₂)·σ along
+ * the covariance principal directions (χ²₂ = −2·ln(1−confidence)). Returns the
+ * same shape as confidenceEllipse, so it feeds straight into Stereonet.ellipse.
+ *
+ * @param {Array<number[]>} dcos
+ * @param {Object} [options]
+ * @param {number} [options.confidence=0.95]
+ * @param {'max'|'min'} [options.about='max']
+ * @param {number} [options.iterations=1000]
+ * @param {()=>number} [options.rng=Math.random]
+ * @returns {{ center:[number,number], a:number, b:number, centerDir:number[],
+ *             majorDir:number[], minorDir:number[], confidence:number, iterations:number }}
+ */
+export function bootstrapEigenvectorConfidence(dcos, options = {}) {
+  const confidence = options.confidence != null ? options.confidence : 0.95;
+  const iterations = options.iterations || 1000;
+  const about = options.about || 'max';
+  const rng = options.rng || Math.random;
+  const ci = about === 'min' ? 2 : 0;
+
+  const ref = principalAxes(dcos).eigenvectors[ci];
+  const [u, w] = tangentBasis(ref);
+
+  let sxx = 0, sxy = 0, syy = 0, count = 0;
+  for (let it = 0; it < iterations; it++) {
+    let v = principalAxes(resample(dcos, rng)).eigenvectors[ci];
+    if (v[0] * ref[0] + v[1] * ref[1] + v[2] * ref[2] < 0) v = vec3.negate(v);
+    const x = v[0] * u[0] + v[1] * u[1] + v[2] * u[2];   // tangent coords (≈ radians)
+    const y = v[0] * w[0] + v[1] * w[1] + v[2] * w[2];
+    sxx += x * x; sxy += x * y; syy += y * y; count += 1;
+  }
+  sxx /= count; sxy /= count; syy /= count;
+
+  // 2×2 covariance eigen-decomposition.
+  const tr = sxx + syy;
+  const det = sxx * syy - sxy * sxy;
+  const disc = Math.sqrt(Math.max(0, tr * tr / 4 - det));
+  const l1 = tr / 2 + disc;   // larger variance
+  const l2 = tr / 2 - disc;
+  // principal direction (in the u,w plane) of the larger-variance axis
+  let ax = sxy, ay = l1 - sxx;
+  if (Math.abs(ax) < 1e-15 && Math.abs(ay) < 1e-15) { ax = 1; ay = 0; }
+  const an = Math.hypot(ax, ay) || 1;
+  ax /= an; ay /= an;
+
+  const chi2 = -2 * Math.log(1 - confidence);
+  const majorDir = [
+    u[0] * ax + w[0] * ay, u[1] * ax + w[1] * ay, u[2] * ax + w[2] * ay,
+  ];
+  const minorDir = [
+    u[0] * -ay + w[0] * ax, u[1] * -ay + w[1] * ax, u[2] * -ay + w[2] * ax,
+  ];
+
+  return {
+    center: dcosToLine(ref),
+    a: Math.min(90, Math.sqrt(chi2 * Math.max(0, l1)) * RAD2DEG),
+    b: Math.min(90, Math.sqrt(chi2 * Math.max(0, l2)) * RAD2DEG),
+    centerDir: ref,
+    majorDir,
+    minorDir,
+    confidence,
+    iterations,
+  };
+}

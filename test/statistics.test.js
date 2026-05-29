@@ -5,7 +5,19 @@ import {
   orientationTensor, principalAxes,
   confidenceCone, confidenceEllipse,
   uniformityTest, commonMeanTest,
+  bootstrapMeanConfidence, bootstrapEigenvectorConfidence,
 } from '../src/statistics.js';
+
+// Deterministic RNG (mulberry32) for bootstrap tests.
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 import { planeToDcos, lineToDcos } from '../src/core/conversions.js';
 import * as vec3 from '../src/core/vec3.js';
 
@@ -404,5 +416,45 @@ describe('commonMeanTest', () => {
     const r = commonMeanTest(a, b);
     assert.strictEqual(r.df1, 2);
     assert.strictEqual(r.df2, 2 * (20 - 2));
+  });
+});
+
+describe('bootstrap confidence regions', () => {
+  const cluster = (trend, plunge, n, spread = 6) => {
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      out.push(lineToDcos(trend + ((i % 7) - 3) * spread / 3, plunge + (Math.floor(i / 7) % 7 - 3) * spread / 3));
+    }
+    return out;
+  };
+
+  it('bootstrap mean cone is deterministic with a seeded rng', () => {
+    const data = cluster(120, 40, 30);
+    const r1 = bootstrapMeanConfidence(data, { rng: seeded(42), iterations: 300 });
+    const r2 = bootstrapMeanConfidence(data, { rng: seeded(42), iterations: 300 });
+    assert.strictEqual(r1.halfAngle, r2.halfAngle);
+  });
+
+  it('mean cone shrinks with more data', () => {
+    const small = bootstrapMeanConfidence(cluster(120, 40, 12), { rng: seeded(1), iterations: 400 });
+    const big = bootstrapMeanConfidence(cluster(120, 40, 120), { rng: seeded(1), iterations: 400 });
+    assert.ok(big.halfAngle < small.halfAngle, `big ${big.halfAngle} < small ${small.halfAngle}`);
+  });
+
+  it('mean cone widens with higher confidence', () => {
+    const data = cluster(120, 40, 40);
+    const c95 = bootstrapMeanConfidence(data, { rng: seeded(7), confidence: 0.95, iterations: 500 });
+    const c99 = bootstrapMeanConfidence(data, { rng: seeded(7), confidence: 0.99, iterations: 500 });
+    assert.ok(c99.halfAngle >= c95.halfAngle);
+  });
+
+  it('bootstrap ellipse: a ≥ b > 0, centred on the eigenvector, feeds Stereonet.ellipse', () => {
+    const data = cluster(120, 40, 50);
+    const e = bootstrapEigenvectorConfidence(data, { rng: seeded(3), iterations: 400 });
+    assert.ok(e.a >= e.b && e.b > 0);
+    const { eigenvectors } = principalAxes(data);
+    const adot = Math.abs(e.centerDir[0] * eigenvectors[0][0] + e.centerDir[1] * eigenvectors[0][1] + e.centerDir[2] * eigenvectors[0][2]);
+    assertClose(adot, 1, 'centre == V1', 1e-9);
+    assert.ok(Array.isArray(e.majorDir) && e.majorDir.length === 3);
   });
 });

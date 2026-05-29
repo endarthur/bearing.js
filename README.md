@@ -16,6 +16,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Eigenvalue decomposition, Woodcock and Vollmer fabric parameters, Bingham statistics
 - Confidence regions: Fisher cone of confidence + eigenvector confidence ellipses
 - Hypothesis tests: spherical uniformity (Bingham), two-sample common mean (Watson–Williams), Rayleigh
+- Bootstrap confidence regions (non-parametric cone for the mean, ellipse for eigenvectors)
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
@@ -135,7 +136,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-379 tests using Node.js built-in test runner.
+383 tests using Node.js built-in test runner.
 
 ## License
 
