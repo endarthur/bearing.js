@@ -4922,8 +4922,10 @@ var bearing = (() => {
     conventions: () => conventions,
     eulerToMatrix: () => eulerToMatrix,
     eulerToQuat: () => eulerToQuat,
+    frameFromDipDirRake: () => frameFromDipDirRake,
     gslibToMatrix: () => gslibToMatrix,
     matrixToBunge: () => matrixToBunge,
+    matrixToDipDirRake: () => matrixToDipDirRake,
     matrixToEuler: () => matrixToEuler,
     matrixToGslib: () => matrixToGslib,
     quatToEuler: () => quatToEuler
@@ -4935,9 +4937,10 @@ var bearing = (() => {
   function eulerToMatrix(angles, order = "XYZ", options = {}) {
     const o = order.toUpperCase();
     const k = options.radians ? 1 : DEG8;
-    const Ra = rotationFromAxisAngle(AXIS[o[0]], angles[0] * k);
-    const Rb = rotationFromAxisAngle(AXIS[o[1]], angles[1] * k);
-    const Rc = rotationFromAxisAngle(AXIS[o[2]], angles[2] * k);
+    const s = options.signs || [1, 1, 1];
+    const Ra = rotationFromAxisAngle(AXIS[o[0]], angles[0] * s[0] * k);
+    const Rb = rotationFromAxisAngle(AXIS[o[1]], angles[1] * s[1] * k);
+    const Rc = rotationFromAxisAngle(AXIS[o[2]], angles[2] * s[2] * k);
     return options.intrinsic ? multiply(Ra, multiply(Rb, Rc)) : multiply(Rc, multiply(Rb, Ra));
   }
   function getOrd(order) {
@@ -4995,8 +4998,9 @@ var bearing = (() => {
     } else {
       res = extractExtrinsic(R, o);
     }
+    const s = options.signs || [1, 1, 1];
     const div = options.radians ? 1 : DEG8;
-    return res.map((v) => v / div);
+    return res.map((v, idx) => v * s[idx] / div);
   }
   function eulerToQuat(angles, order = "XYZ", options = {}) {
     return fromMatrix(eulerToMatrix(angles, order, options));
@@ -5011,6 +5015,25 @@ var bearing = (() => {
     zyx: { order: "ZYX", intrinsic: false }
     // yaw-pitch-roll (aerospace, extrinsic)
   };
+  function frameFromDipDirRake(dipDir, dip, rake) {
+    const z = normalize(planeToDcos(dipDir, dip));
+    const x = normalize(rakeToDcos(dipDir, dip, rake));
+    const y = cross(z, x);
+    return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
+  }
+  function matrixToDipDirRake(R) {
+    const x = [R[0], R[3], R[6]];
+    const z = [R[2], R[5], R[8]];
+    const [dipDir, dip] = dcosToPlane(z);
+    const ddR = dipDir * DEG8, dR = dip * DEG8;
+    const s = [-Math.cos(ddR), Math.sin(ddR), 0];
+    const d = [Math.cos(dR) * Math.sin(ddR), Math.cos(dR) * Math.cos(ddR), -Math.sin(dR)];
+    const rake = Math.atan2(
+      x[0] * d[0] + x[1] * d[1] + x[2] * d[2],
+      x[0] * s[0] + x[1] * s[1] + x[2] * s[2]
+    ) / DEG8;
+    return [dipDir, dip, rake];
+  }
   function bungeToMatrix(phi1, Phi, phi2, options = {}) {
     return eulerToMatrix([phi1, Phi, phi2], "ZXZ", { intrinsic: true, radians: options.radians });
   }

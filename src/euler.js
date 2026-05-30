@@ -14,6 +14,8 @@
 
 import * as mat3 from './core/mat3.js';
 import * as quat from './core/quat.js';
+import * as vec3 from './core/vec3.js';
+import { planeToDcos, rakeToDcos, dcosToPlane } from './core/conversions.js';
 
 const DEG = Math.PI / 180;
 const AXIS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
@@ -27,14 +29,17 @@ const EUL_NEXT = [1, 2, 0, 1];
  * @param {Object} [options]
  * @param {boolean} [options.intrinsic=false] - rotate about the moving frame (intrinsic) vs fixed axes (extrinsic)
  * @param {boolean} [options.radians=false] - angles already in radians
+ * @param {number[]} [options.signs=[1,1,1]] - per-angle sign (±1) — flips the rotation
+ *   sense of an axis, to match packages that negate one or more angles
  * @returns {number[]} flat row-major 3×3
  */
 export function eulerToMatrix(angles, order = 'XYZ', options = {}) {
   const o = order.toUpperCase();
   const k = options.radians ? 1 : DEG;
-  const Ra = mat3.rotationFromAxisAngle(AXIS[o[0]], angles[0] * k);
-  const Rb = mat3.rotationFromAxisAngle(AXIS[o[1]], angles[1] * k);
-  const Rc = mat3.rotationFromAxisAngle(AXIS[o[2]], angles[2] * k);
+  const s = options.signs || [1, 1, 1];
+  const Ra = mat3.rotationFromAxisAngle(AXIS[o[0]], angles[0] * s[0] * k);
+  const Rb = mat3.rotationFromAxisAngle(AXIS[o[1]], angles[1] * s[1] * k);
+  const Rc = mat3.rotationFromAxisAngle(AXIS[o[2]], angles[2] * s[2] * k);
   // Intrinsic (moving axes): R = Ra·Rb·Rc. Extrinsic (fixed axes): R = Rc·Rb·Ra.
   return options.intrinsic
     ? mat3.multiply(Ra, mat3.multiply(Rb, Rc))
@@ -104,8 +109,9 @@ export function matrixToEuler(R, order = 'XYZ', options = {}) {
   } else {
     res = extractExtrinsic(R, o);
   }
+  const s = options.signs || [1, 1, 1];
   const div = options.radians ? 1 : DEG;
-  return res.map(v => v / div);
+  return res.map((v, idx) => (v * s[idx]) / div); // sign ±1 undoes the forward flip
 }
 
 /** Euler angles → quaternion. */
@@ -127,6 +133,41 @@ export const conventions = {
   xyz: { order: 'XYZ', intrinsic: false },
   zyx: { order: 'ZYX', intrinsic: false },       // yaw-pitch-roll (aerospace, extrinsic)
 };
+
+/**
+ * Dip-direction / dip / rake → orientation frame (Leapfrog, Isatis Neo).
+ * A structural-geology frame, NOT a crystallographic (Bunge) convention: the
+ * plane pole is Z, the in-plane line at the given rake (pitch) is X, and
+ * Y = Z × X. Rake is measured from strike (right-hand rule), matching
+ * conversions.rakeToDcos. Columns of the matrix are [X, Y, Z].
+ * @param {number} dipDir - dip direction (deg)
+ * @param {number} dip - dip (deg)
+ * @param {number} rake - rake / pitch (deg)
+ * @returns {number[]} flat row-major 3×3
+ */
+export function frameFromDipDirRake(dipDir, dip, rake) {
+  const z = vec3.normalize(planeToDcos(dipDir, dip));        // pole
+  const x = vec3.normalize(rakeToDcos(dipDir, dip, rake));   // line at rake
+  const y = vec3.cross(z, x);
+  return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
+}
+
+/** Orientation frame → [dipDirection, dip, rake] (degrees). Inverse of frameFromDipDirRake. */
+export function matrixToDipDirRake(R) {
+  const x = [R[0], R[3], R[6]];   // X column = directed line at rake
+  const z = [R[2], R[5], R[8]];   // Z column = pole
+  const [dipDir, dip] = dcosToPlane(z);
+  // Rake from the directed X vector (no lower-hemisphere fold), in the same
+  // strike/down-dip basis as rakeToDcos: line = cos(rake)·strike + sin(rake)·dip.
+  const ddR = dipDir * DEG, dR = dip * DEG;
+  const s = [-Math.cos(ddR), Math.sin(ddR), 0];
+  const d = [Math.cos(dR) * Math.sin(ddR), Math.cos(dR) * Math.cos(ddR), -Math.sin(dR)];
+  const rake = Math.atan2(
+    x[0] * d[0] + x[1] * d[1] + x[2] * d[2],
+    x[0] * s[0] + x[1] * s[1] + x[2] * s[2],
+  ) / DEG;
+  return [dipDir, dip, rake];
+}
 
 /** Crystallographic Bunge Euler angles (φ1, Φ, φ2) → matrix. */
 export function bungeToMatrix(phi1, Phi, phi2, options = {}) {

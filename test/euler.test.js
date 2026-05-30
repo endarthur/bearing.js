@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   eulerToMatrix, matrixToEuler, eulerToQuat, quatToEuler,
   bungeToMatrix, matrixToBunge, gslibToMatrix, matrixToGslib,
+  frameFromDipDirRake, matrixToDipDirRake,
 } from '../src/euler.js';
 import * as mat3 from '../src/core/mat3.js';
 import * as quat from '../src/core/quat.js';
+import { planeToDcos, dcosToPlane } from '../src/core/conversions.js';
 
 const ALL_ORDERS = [
   'XYZ', 'XZY', 'YXZ', 'YZX', 'ZXY', 'ZYX',           // Tait–Bryan
@@ -46,6 +48,23 @@ describe('euler general engine', () => {
     approxArr(intr, extr, 1e-9);
   });
 
+  it('per-axis sign flags negate the corresponding angle', () => {
+    const angles = [25, 40, 65];
+    // sign on an angle == passing the negated angle
+    approxArr(eulerToMatrix(angles, 'ZXZ', { signs: [-1, 1, -1] }),
+      eulerToMatrix([-25, 40, -65], 'ZXZ'), 1e-12);
+  });
+
+  it('sign flags round-trip (matrix → angles recovers the originals)', () => {
+    for (const order of ['XYZ', 'ZYX', 'ZXZ']) {
+      for (const intrinsic of [false, true]) {
+        const signs = [1, -1, -1];
+        const R = eulerToMatrix([18, 33, -47], order, { intrinsic, signs });
+        approxArr(eulerToMatrix(matrixToEuler(R, order, { intrinsic, signs }), order, { intrinsic, signs }), R, 1e-7);
+      }
+    }
+  });
+
   it('radians option matches the degree equivalent', () => {
     const deg = eulerToMatrix([30, 45, 60], 'ZXZ');
     const rad = eulerToMatrix([30 * Math.PI / 180, 45 * Math.PI / 180, 60 * Math.PI / 180], 'ZXZ', { radians: true });
@@ -68,6 +87,25 @@ describe('Bunge crystallographic angles', () => {
     approxArr(eulerToMatrix(matrixToBunge(R), 'ZXZ', { intrinsic: true }), R, 1e-7);
   });
 });
+
+describe('dip / dip-direction / rake (Leapfrog, Isatis Neo)', () => {
+  it('produces a proper rotation whose Z column is the plane pole', () => {
+    const R = frameFromDipDirRake(120, 50, 30);
+    approxArr(mat3.multiply(mat3.transpose(R), R), mat3.identity(), 1e-9);
+    approxArr([R[2], R[5], R[8]], vec3normalize(planeToDcos(120, 50)), 1e-9);
+  });
+
+  it('round-trips dip-direction / dip / rake', () => {
+    for (const [dd, dip, rake] of [[120, 50, 30], [40, 80, -45], [300, 20, 120], [10, 35, 0]]) {
+      const [r1, r2, r3] = matrixToDipDirRake(frameFromDipDirRake(dd, dip, rake));
+      assert.ok(Math.abs(r1 - dd) < 1e-6, `dipDir ${r1} vs ${dd}`);
+      assert.ok(Math.abs(r2 - dip) < 1e-6, `dip ${r2} vs ${dip}`);
+      assert.ok(Math.abs(r3 - rake) < 1e-6, `rake ${r3} vs ${rake}`);
+    }
+  });
+});
+
+function vec3normalize(v) { const l = Math.hypot(v[0], v[1], v[2]); return [v[0] / l, v[1] / l, v[2] / l]; }
 
 describe('GSLIB anisotropy angles', () => {
   it('produces a proper rotation', () => {
