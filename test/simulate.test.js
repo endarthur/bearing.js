@@ -1,8 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { sampleFisher, smoothedBootstrap, defaultKappa } from '../src/simulate.js';
+import { sampleFisher, smoothedBootstrap, defaultKappa, randomRotation, sampleRotation } from '../src/simulate.js';
 import { lineToDcos } from '../src/core/conversions.js';
 import { meanVector, principalAxes } from '../src/statistics.js';
+import { meanRotation, misorientation } from '../src/rotation.js';
+import * as mat3 from '../src/core/mat3.js';
 import * as vec3 from '../src/core/vec3.js';
 
 function seeded(seed) {
@@ -90,5 +92,54 @@ describe('smoothedBootstrap', () => {
       smoothedBootstrap(data, 50, { rng: seeded(9) }),
     );
     assert.deepStrictEqual(smoothedBootstrap([], 10), []);
+  });
+});
+
+const det3 = (m) =>
+  m[0] * (m[4] * m[8] - m[5] * m[7]) - m[1] * (m[3] * m[8] - m[5] * m[6]) + m[2] * (m[3] * m[7] - m[4] * m[6]);
+const isRotation = (R) => {
+  for (let i = 0; i < 9; i++) if (Math.abs(mat3.multiply(mat3.transpose(R), R)[i] - mat3.identity()[i]) > 1e-9) return false;
+  return Math.abs(det3(R) - 1) < 1e-9;
+};
+
+describe('randomRotation', () => {
+  it('returns proper rotations', () => {
+    const rng = seeded(1);
+    for (let i = 0; i < 20; i++) assert.ok(isRotation(randomRotation(rng)));
+  });
+
+  it('is deterministic with a seeded rng', () => {
+    assert.deepStrictEqual(randomRotation(seeded(7)), randomRotation(seeded(7)));
+  });
+
+  it('is approximately uniform (low mean concentration over many)', () => {
+    const rng = seeded(3);
+    const rots = Array.from({ length: 500 }, () => randomRotation(rng));
+    assert.ok(meanRotation(rots).concentration < 0.5, `concentration ${meanRotation(rots).concentration}`);
+  });
+});
+
+describe('sampleRotation', () => {
+  const meanR = mat3.rotationFromAxisAngle(vec3.normalize([1, 2, 1]), 0.8);
+
+  it('returns proper rotations concentrated about the mean', () => {
+    const rng = seeded(4);
+    const rots = sampleRotation(meanR, 5, 300, rng);
+    assert.ok(rots.every(isRotation));
+    const meanAngle = rots.reduce((s, R) => s + misorientation(meanR, R).angle, 0) / rots.length;
+    assert.ok(meanAngle < 12, `mean misorientation ${meanAngle}° should be small for σ=5°`);
+  });
+
+  it('larger sigma gives a larger spread', () => {
+    const ang = (sig) => {
+      const rng = seeded(11);
+      const rots = sampleRotation(meanR, sig, 300, rng);
+      return rots.reduce((s, R) => s + misorientation(meanR, R).angle, 0) / rots.length;
+    };
+    assert.ok(ang(20) > ang(5));
+  });
+
+  it('is deterministic with a seeded rng', () => {
+    assert.deepStrictEqual(sampleRotation(meanR, 10, 5, seeded(2)), sampleRotation(meanR, 10, 5, seeded(2)));
   });
 });

@@ -21,7 +21,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
 - Fault-slip & paleostress: kinematic P/T axes, right-dihedra field, Michael (1984) stress inversion
 - Automatic set identification (axial k-means clustering of orientations)
-- Synthetic sampling: Fisher draws + Fisher-kernel smoothed bootstrap (non-parametric simulation)
+- Synthetic sampling: Fisher draws, smoothed bootstrap, uniform + concentrated rotation sampling
 - Rotation analysis (SO(3)): quaternions, foliation∧lineation frames, misorientation, mean rotation
 - Rotation-notation conversions: 24 Euler conventions with per-axis sign flags; dip/dipdir/rake (Leapfrog, Isatis), Bunge, GSLIB presets
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
@@ -84,7 +84,7 @@ npm run build
 | `io` | Parse attitude strings and text blocks |
 | `equalArea` / `equalAngle` | Projection functions |
 | `vec3` / `mat3` / `quat` | 3D vector, matrix, and quaternion operations |
-| `rotation` | SO(3) analysis: plane∧lineation frames, misorientation, mean rotation, slerp |
+| `rotation` | SO(3): frames, misorientation, mean + bootstrap confidence, apply/compose, log/exp (rotation vector) |
 | `euler` | Rotation-notation conversions: 24 Euler conventions (± per-axis signs) ↔ matrix/quaternion; dip/dipdir/rake, Bunge, GSLIB presets |
 | `curves` | Small circles, great circles as point sequences |
 | `computeContours` | Kernel-density contour lines |
@@ -146,7 +146,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-441 tests using Node.js built-in test runner.
+458 tests using Node.js built-in test runner.
 
 ## License
 

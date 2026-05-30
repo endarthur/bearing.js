@@ -179,6 +179,18 @@ export namespace rotation {
   function slerp(R0: Mat3, R1: Mat3, t: number): Mat3;
   function eulerPole(R: Mat3): { axis: Attitude; angle: number };
   function meanRotation(rotations: Mat3[]): { mean: Mat3; quaternion: Quat; concentration: number; spread: number };
+  function apply(R: Mat3, data: Dcos): Dcos;
+  function apply(R: Mat3, data: Dcos[]): Dcos[];
+  function applyToPlane(R: Mat3, dd: number, dip: number): Attitude;
+  function applyToLine(R: Mat3, trend: number, plunge: number): Attitude;
+  function inverse(R: Mat3): Mat3;
+  function relative(R1: Mat3, R2: Mat3): Mat3;
+  function fromPoleAngle(trend: number, plunge: number, angle: number): Mat3;
+  function rotationVector(R: Mat3): number[];
+  function fromRotationVector(v: number[]): Mat3;
+  function bootstrapMeanRotation(rotations: Mat3[], options?: {
+    confidence?: number; iterations?: number; rng?: () => number;
+  }): { mean: Mat3; halfAngle: number; confidence: number; iterations: number };
 }
 
 export interface EulerOptions { intrinsic?: boolean; radians?: boolean; signs?: number[]; }
@@ -326,6 +338,8 @@ export namespace simulate {
   function smoothedBootstrap(dcos: Dcos[], m?: number, options?: {
     kappa?: number; lowerHemisphere?: boolean; rng?: () => number;
   }): Dcos[];
+  function randomRotation(rng?: () => number): Mat3;
+  function sampleRotation(meanR: Mat3, sigmaDeg: number, n: number, rng?: () => number): Mat3[];
 }
 
 export namespace color {

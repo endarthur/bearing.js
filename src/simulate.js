@@ -9,6 +9,9 @@
  */
 
 import * as vec3 from './core/vec3.js';
+import * as quat from './core/quat.js';
+import * as mat3 from './core/mat3.js';
+import { fromRotationVector } from './rotation.js';
 
 const DEG = Math.PI / 180;
 
@@ -89,6 +92,52 @@ export function smoothedBootstrap(dcos, m, options = {}) {
     const p = sampleFisher(d, kappa, 1, rng)[0];
     if (fold && p[2] > 0) { p[0] = -p[0]; p[1] = -p[1]; p[2] = -p[2]; }
     out.push(p);
+  }
+  return out;
+}
+
+// One standard-normal sample (Box–Muller).
+function gaussian(rng) {
+  let u = 0, v = 0;
+  while (u === 0) u = rng();
+  while (v === 0) v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+/**
+ * A rotation drawn uniformly from SO(3) (Shoemake's method).
+ * @param {()=>number} [rng=Math.random]
+ * @returns {number[]} flat row-major 3×3
+ */
+export function randomRotation(rng = Math.random) {
+  const u1 = rng(), u2 = rng(), u3 = rng();
+  const a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
+  // Any assignment of these four (unit) components yields a uniform rotation.
+  const q = [
+    b * Math.cos(2 * Math.PI * u3),
+    a * Math.sin(2 * Math.PI * u2),
+    a * Math.cos(2 * Math.PI * u2),
+    b * Math.sin(2 * Math.PI * u3),
+  ];
+  return quat.toMatrix(q);
+}
+
+/**
+ * Sample rotations concentrated about a mean: an isotropic Gaussian of angular
+ * std `sigmaDeg` in the tangent space (a small-angle matrix-Fisher proxy),
+ * composed with the mean. The SO(3) counterpart of sampleFisher.
+ * @param {number[]} meanR - flat 3×3 mean rotation
+ * @param {number} sigmaDeg - angular standard deviation (degrees)
+ * @param {number} n - number of samples
+ * @param {()=>number} [rng=Math.random]
+ * @returns {Array<number[]>} flat 3×3 rotations
+ */
+export function sampleRotation(meanR, sigmaDeg, n, rng = Math.random) {
+  const s = sigmaDeg * DEG;
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const v = [gaussian(rng) * s, gaussian(rng) * s, gaussian(rng) * s];
+    out.push(mat3.multiply(fromRotationVector(v), meanR));
   }
   return out;
 }

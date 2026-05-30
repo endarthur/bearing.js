@@ -2036,35 +2036,35 @@ var bearing = (() => {
     return type === "polar" ? generatePolarNet(interval) : generateEquatorialNet(interval);
   }
   function generateEquatorialNet(interval) {
-    const DEG9 = Math.PI / 180;
+    const DEG10 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let alpha = 0; alpha < 180; alpha += interval) {
-      const alphaR = alpha * DEG9;
+      const alphaR = alpha * DEG10;
       greatCircles.push(
         greatCircle([Math.sin(alphaR), 0, Math.cos(alphaR)], 360)
       );
     }
     for (let alpha = interval; alpha < 180; alpha += interval) {
       smallCircles.push(
-        smallCircle([0, 1, 0], alpha * DEG9, 360)
+        smallCircle([0, 1, 0], alpha * DEG10, 360)
       );
     }
     return { greatCircles, smallCircles };
   }
   function generatePolarNet(interval) {
-    const DEG9 = Math.PI / 180;
+    const DEG10 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let az = 0; az < 180; az += interval) {
-      const azR = az * DEG9;
+      const azR = az * DEG10;
       greatCircles.push(
         greatCircle([Math.cos(azR), -Math.sin(azR), 0], 360)
       );
     }
     for (let dip = interval; dip <= 90; dip += interval) {
       smallCircles.push(
-        smallCircle([0, 0, -1], dip * DEG9, 360)
+        smallCircle([0, 0, -1], dip * DEG10, 360)
       );
     }
     return { greatCircles, smallCircles };
@@ -4785,70 +4785,33 @@ var bearing = (() => {
   var simulate_exports = {};
   __export(simulate_exports, {
     defaultKappa: () => defaultKappa,
+    randomRotation: () => randomRotation,
     sampleFisher: () => sampleFisher,
+    sampleRotation: () => sampleRotation,
     smoothedBootstrap: () => smoothedBootstrap
   });
-  var DEG7 = Math.PI / 180;
-  function tangentBasis2(mu) {
-    const ref = Math.abs(mu[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
-    const u = normalize(cross(mu, ref));
-    return [u, cross(mu, u)];
-  }
-  function defaultKappa(n) {
-    const sigma = 90 / Math.sqrt(Math.max(1, n)) * DEG7;
-    return 1 / (1 - Math.cos(sigma));
-  }
-  function sampleFisher(mean, kappa, n, rng = Math.random) {
-    const mu = normalize(mean);
-    const [u, v] = tangentBasis2(mu);
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      const U = rng();
-      let w = kappa < 1e-6 ? 2 * U - 1 : 1 + Math.log(U + (1 - U) * Math.exp(-2 * kappa)) / kappa;
-      w = Math.max(-1, Math.min(1, w));
-      const phi = 2 * Math.PI * rng();
-      const s = Math.sqrt(Math.max(0, 1 - w * w));
-      const cp = Math.cos(phi), sp = Math.sin(phi);
-      out.push([
-        s * (cp * u[0] + sp * v[0]) + w * mu[0],
-        s * (cp * u[1] + sp * v[1]) + w * mu[1],
-        s * (cp * u[2] + sp * v[2]) + w * mu[2]
-      ]);
-    }
-    return out;
-  }
-  function smoothedBootstrap(dcos, m, options = {}) {
-    const n = dcos.length;
-    if (n === 0) return [];
-    const count = m != null ? m : n;
-    const rng = options.rng || Math.random;
-    const kappa = options.kappa != null ? options.kappa : defaultKappa(n);
-    const fold = options.lowerHemisphere !== false;
-    const out = [];
-    for (let i = 0; i < count; i++) {
-      const d = dcos[rng() * n | 0];
-      const p = sampleFisher(d, kappa, 1, rng)[0];
-      if (fold && p[2] > 0) {
-        p[0] = -p[0];
-        p[1] = -p[1];
-        p[2] = -p[2];
-      }
-      out.push(p);
-    }
-    return out;
-  }
 
   // src/rotation.js
   var rotation_exports = {};
   __export(rotation_exports, {
+    apply: () => apply,
+    applyToLine: () => applyToLine,
+    applyToPlane: () => applyToPlane,
+    bootstrapMeanRotation: () => bootstrapMeanRotation,
     compose: () => compose,
     eulerPole: () => eulerPole,
     frameFromPlaneLine: () => frameFromPlaneLine,
+    fromPoleAngle: () => fromPoleAngle,
+    fromRotationVector: () => fromRotationVector,
+    inverse: () => inverse3,
     meanRotation: () => meanRotation,
     misorientation: () => misorientation,
+    relative: () => relative,
+    rotationVector: () => rotationVector,
     slerp: () => slerp2
   });
   var RAD2DEG2 = 180 / Math.PI;
+  var DEG7 = Math.PI / 180;
   function frameFromPlaneLine(dd, dip, trend, plunge) {
     const z = normalize(planeToDcos(dd, dip));
     const l = lineToDcos(trend, plunge);
@@ -4914,6 +4877,126 @@ var bearing = (() => {
     for (const R of rotations) spread += misorientation(mean, R).angle;
     return { mean, quaternion: meanQ, concentration: value, spread: spread / n };
   }
+  function apply(R, data) {
+    return Array.isArray(data[0]) ? data.map((d) => transformVec3(R, d)) : transformVec3(R, data);
+  }
+  function applyToPlane(R, dd, dip) {
+    return dcosToPlane(transformVec3(R, planeToDcos(dd, dip)));
+  }
+  function applyToLine(R, trend, plunge) {
+    return dcosToLine(transformVec3(R, lineToDcos(trend, plunge)));
+  }
+  function inverse3(R) {
+    return transpose(R);
+  }
+  function relative(R1, R2) {
+    return multiply(R2, transpose(R1));
+  }
+  function fromPoleAngle(trend, plunge, angle3) {
+    return rotationFromAxisAngle(lineToDcos(trend, plunge), angle3 * DEG7);
+  }
+  function rotationVector(R) {
+    const { axis, angle: angle3 } = toAxisAngle(fromMatrix(R));
+    return [axis[0] * angle3, axis[1] * angle3, axis[2] * angle3];
+  }
+  function fromRotationVector(v) {
+    const angle3 = Math.hypot(v[0], v[1], v[2]);
+    if (angle3 < 1e-12) return identity();
+    return rotationFromAxisAngle([v[0] / angle3, v[1] / angle3, v[2] / angle3], angle3);
+  }
+  function bootstrapMeanRotation(rotations, options = {}) {
+    const confidence = options.confidence != null ? options.confidence : 0.95;
+    const iterations = options.iterations || 500;
+    const rng = options.rng || Math.random;
+    const n = rotations.length;
+    const mean0 = meanRotation(rotations).mean;
+    const angles = [];
+    for (let it = 0; it < iterations; it++) {
+      const sample = new Array(n);
+      for (let i = 0; i < n; i++) sample[i] = rotations[rng() * n | 0];
+      angles.push(misorientation(mean0, meanRotation(sample).mean).angle);
+    }
+    angles.sort((a, b) => a - b);
+    const idx = Math.min(angles.length - 1, Math.floor(confidence * angles.length));
+    return { mean: mean0, halfAngle: angles[idx], confidence, iterations };
+  }
+
+  // src/simulate.js
+  var DEG8 = Math.PI / 180;
+  function tangentBasis2(mu) {
+    const ref = Math.abs(mu[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const u = normalize(cross(mu, ref));
+    return [u, cross(mu, u)];
+  }
+  function defaultKappa(n) {
+    const sigma = 90 / Math.sqrt(Math.max(1, n)) * DEG8;
+    return 1 / (1 - Math.cos(sigma));
+  }
+  function sampleFisher(mean, kappa, n, rng = Math.random) {
+    const mu = normalize(mean);
+    const [u, v] = tangentBasis2(mu);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const U = rng();
+      let w = kappa < 1e-6 ? 2 * U - 1 : 1 + Math.log(U + (1 - U) * Math.exp(-2 * kappa)) / kappa;
+      w = Math.max(-1, Math.min(1, w));
+      const phi = 2 * Math.PI * rng();
+      const s = Math.sqrt(Math.max(0, 1 - w * w));
+      const cp = Math.cos(phi), sp = Math.sin(phi);
+      out.push([
+        s * (cp * u[0] + sp * v[0]) + w * mu[0],
+        s * (cp * u[1] + sp * v[1]) + w * mu[1],
+        s * (cp * u[2] + sp * v[2]) + w * mu[2]
+      ]);
+    }
+    return out;
+  }
+  function smoothedBootstrap(dcos, m, options = {}) {
+    const n = dcos.length;
+    if (n === 0) return [];
+    const count = m != null ? m : n;
+    const rng = options.rng || Math.random;
+    const kappa = options.kappa != null ? options.kappa : defaultKappa(n);
+    const fold = options.lowerHemisphere !== false;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const d = dcos[rng() * n | 0];
+      const p = sampleFisher(d, kappa, 1, rng)[0];
+      if (fold && p[2] > 0) {
+        p[0] = -p[0];
+        p[1] = -p[1];
+        p[2] = -p[2];
+      }
+      out.push(p);
+    }
+    return out;
+  }
+  function gaussian(rng) {
+    let u = 0, v = 0;
+    while (u === 0) u = rng();
+    while (v === 0) v = rng();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+  function randomRotation(rng = Math.random) {
+    const u1 = rng(), u2 = rng(), u3 = rng();
+    const a = Math.sqrt(1 - u1), b = Math.sqrt(u1);
+    const q = [
+      b * Math.cos(2 * Math.PI * u3),
+      a * Math.sin(2 * Math.PI * u2),
+      a * Math.cos(2 * Math.PI * u2),
+      b * Math.sin(2 * Math.PI * u3)
+    ];
+    return toMatrix(q);
+  }
+  function sampleRotation(meanR, sigmaDeg, n, rng = Math.random) {
+    const s = sigmaDeg * DEG8;
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const v = [gaussian(rng) * s, gaussian(rng) * s, gaussian(rng) * s];
+      out.push(multiply(fromRotationVector(v), meanR));
+    }
+    return out;
+  }
 
   // src/euler.js
   var euler_exports = {};
@@ -4930,13 +5013,13 @@ var bearing = (() => {
     matrixToGslib: () => matrixToGslib,
     quatToEuler: () => quatToEuler
   });
-  var DEG8 = Math.PI / 180;
+  var DEG9 = Math.PI / 180;
   var AXIS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
   var IDX = { X: 0, Y: 1, Z: 2 };
   var EUL_NEXT = [1, 2, 0, 1];
   function eulerToMatrix(angles, order = "XYZ", options = {}) {
     const o = order.toUpperCase();
-    const k = options.radians ? 1 : DEG8;
+    const k = options.radians ? 1 : DEG9;
     const s = options.signs || [1, 1, 1];
     const Ra = rotationFromAxisAngle(AXIS[o[0]], angles[0] * s[0] * k);
     const Rb = rotationFromAxisAngle(AXIS[o[1]], angles[1] * s[1] * k);
@@ -4999,7 +5082,7 @@ var bearing = (() => {
       res = extractExtrinsic(R, o);
     }
     const s = options.signs || [1, 1, 1];
-    const div = options.radians ? 1 : DEG8;
+    const div = options.radians ? 1 : DEG9;
     return res.map((v, idx) => v * s[idx] / div);
   }
   function eulerToQuat(angles, order = "XYZ", options = {}) {
@@ -5025,13 +5108,13 @@ var bearing = (() => {
     const x = [R[0], R[3], R[6]];
     const z = [R[2], R[5], R[8]];
     const [dipDir, dip] = dcosToPlane(z);
-    const ddR = dipDir * DEG8, dR = dip * DEG8;
+    const ddR = dipDir * DEG9, dR = dip * DEG9;
     const s = [-Math.cos(ddR), Math.sin(ddR), 0];
     const d = [Math.cos(dR) * Math.sin(ddR), Math.cos(dR) * Math.cos(ddR), -Math.sin(dR)];
     const rake = Math.atan2(
       x[0] * d[0] + x[1] * d[1] + x[2] * d[2],
       x[0] * s[0] + x[1] * s[1] + x[2] * s[2]
-    ) / DEG8;
+    ) / DEG9;
     return [dipDir, dip, rake];
   }
   function bungeToMatrix(phi1, Phi, phi2, options = {}) {
@@ -5041,9 +5124,9 @@ var bearing = (() => {
     return matrixToEuler(R, "ZXZ", { intrinsic: true, radians: options.radians });
   }
   function gslibToMatrix(ang1, ang2, ang3) {
-    const alpha = (ang1 >= 0 && ang1 < 270 ? 90 - ang1 : 450 - ang1) * DEG8;
-    const beta = -ang2 * DEG8;
-    const theta = ang3 * DEG8;
+    const alpha = (ang1 >= 0 && ang1 < 270 ? 90 - ang1 : 450 - ang1) * DEG9;
+    const beta = -ang2 * DEG9;
+    const theta = ang3 * DEG9;
     const sa = Math.sin(alpha), ca = Math.cos(alpha);
     const sb = Math.sin(beta), cb = Math.cos(beta);
     const st = Math.sin(theta), ct = Math.cos(theta);
@@ -5072,10 +5155,10 @@ var bearing = (() => {
       alpha = Math.atan2(-M(1, 0), M(1, 1));
       theta = 0;
     }
-    let ang1 = 90 - alpha / DEG8;
+    let ang1 = 90 - alpha / DEG9;
     ang1 = (ang1 % 360 + 360) % 360;
-    const ang2 = -beta / DEG8;
-    const ang3 = theta / DEG8;
+    const ang2 = -beta / DEG9;
+    const ang3 = theta / DEG9;
     return [ang1, ang2, ang3];
   }
 

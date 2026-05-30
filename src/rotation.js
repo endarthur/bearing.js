@@ -14,9 +14,10 @@
 import * as mat3 from './core/mat3.js';
 import * as vec3 from './core/vec3.js';
 import * as quat from './core/quat.js';
-import { planeToDcos, lineToDcos, dcosToLine } from './core/conversions.js';
+import { planeToDcos, lineToDcos, dcosToLine, dcosToPlane } from './core/conversions.js';
 
 const RAD2DEG = 180 / Math.PI;
+const DEG = Math.PI / 180;
 
 /**
  * Full orientation frame from a foliation/plane and a lineation on it.
@@ -119,4 +120,106 @@ export function meanRotation(rotations) {
   let spread = 0;
   for (const R of rotations) spread += misorientation(mean, R).angle;
   return { mean, quaternion: meanQ, concentration: value, spread: spread / n };
+}
+
+// ---------------------------------------------------------------------------
+//  Apply & combine
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply a rotation to a direction cosine or an array of them.
+ * @param {number[]} R - flat 3×3
+ * @param {number[]|number[][]} data - a single [x,y,z] or an array of them
+ * @returns {number[]|number[][]} rotated vector(s)
+ */
+export function apply(R, data) {
+  return Array.isArray(data[0])
+    ? data.map(d => mat3.transformVec3(R, d))
+    : mat3.transformVec3(R, data);
+}
+
+/** Rotate a plane (dip dir, dip) by R → new [dipDir, dip]. */
+export function applyToPlane(R, dd, dip) {
+  return dcosToPlane(mat3.transformVec3(R, planeToDcos(dd, dip)));
+}
+
+/** Rotate a line (trend, plunge) by R → new [trend, plunge]. */
+export function applyToLine(R, trend, plunge) {
+  return dcosToLine(mat3.transformVec3(R, lineToDcos(trend, plunge)));
+}
+
+/** Inverse rotation (transpose, since R is orthonormal). */
+export function inverse(R) {
+  return mat3.transpose(R);
+}
+
+/**
+ * Relative rotation taking R1's frame onto R2's: relative(R1,R2)·R1 = R2
+ * (= R2·R1ᵀ). This is the rotation whose angle/axis `misorientation` reports —
+ * e.g. the stage rotation between two finite reconstruction poses.
+ */
+export function relative(R1, R2) {
+  return mat3.multiply(R2, mat3.transpose(R1));
+}
+
+/**
+ * Rotation from a geological Euler pole (axis as trend/plunge) and angle.
+ * Inverse of eulerPole().
+ * @param {number} trend @param {number} plunge - axis as a line (deg)
+ * @param {number} angle - rotation angle (deg)
+ * @returns {number[]} flat 3×3
+ */
+export function fromPoleAngle(trend, plunge, angle) {
+  return mat3.rotationFromAxisAngle(lineToDcos(trend, plunge), angle * DEG);
+}
+
+// ---------------------------------------------------------------------------
+//  Tangent space (so(3) log/exp) and bootstrap confidence
+// ---------------------------------------------------------------------------
+
+/**
+ * Rotation vector (so(3) logarithm): axis · angle, a 3-vector whose magnitude is
+ * the rotation angle in radians (≤ π). The tangent-space chart for rotations —
+ * useful for covariance, regression, and Gaussianising rotations about a mean.
+ * @param {number[]} R - flat 3×3
+ * @returns {number[]} [vx, vy, vz] (radians)
+ */
+export function rotationVector(R) {
+  const { axis, angle } = quat.toAxisAngle(quat.fromMatrix(R));
+  return [axis[0] * angle, axis[1] * angle, axis[2] * angle];
+}
+
+/** Rotation from a rotation vector (so(3) exponential). Inverse of rotationVector. */
+export function fromRotationVector(v) {
+  const angle = Math.hypot(v[0], v[1], v[2]);
+  if (angle < 1e-12) return mat3.identity();
+  return mat3.rotationFromAxisAngle([v[0] / angle, v[1] / angle, v[2] / angle], angle);
+}
+
+/**
+ * Non-parametric bootstrap confidence cone on the mean rotation: resample with
+ * replacement, recompute the mean each time, and take the `confidence` quantile
+ * of its misorientation from the full-sample mean. Mirrors
+ * statistics.bootstrapMeanConfidence on S².
+ * @param {Array<number[]>} rotations - flat 3×3 matrices
+ * @param {Object} [options] @param {number} [options.confidence=0.95]
+ *   @param {number} [options.iterations=500] @param {()=>number} [options.rng=Math.random]
+ * @returns {{ mean:number[], halfAngle:number, confidence:number, iterations:number }}
+ */
+export function bootstrapMeanRotation(rotations, options = {}) {
+  const confidence = options.confidence != null ? options.confidence : 0.95;
+  const iterations = options.iterations || 500;
+  const rng = options.rng || Math.random;
+  const n = rotations.length;
+  const mean0 = meanRotation(rotations).mean;
+
+  const angles = [];
+  for (let it = 0; it < iterations; it++) {
+    const sample = new Array(n);
+    for (let i = 0; i < n; i++) sample[i] = rotations[(rng() * n) | 0];
+    angles.push(misorientation(mean0, meanRotation(sample).mean).angle);
+  }
+  angles.sort((a, b) => a - b);
+  const idx = Math.min(angles.length - 1, Math.floor(confidence * angles.length));
+  return { mean: mean0, halfAngle: angles[idx], confidence, iterations };
 }
