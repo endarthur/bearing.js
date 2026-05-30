@@ -136,3 +136,179 @@ export function fitSets(dcos, k, options = {}) {
 
   return { clusters, assignments, cost: best.cost };
 }
+
+// ---------------------------------------------------------------------------
+//  Watson-mixture EM (soft, probabilistic) + model selection
+// ---------------------------------------------------------------------------
+//
+// The Watson distribution f(x) ∝ exp(κ(μ·x)²) is the natural axial (direction ≡
+// antipode) model on the sphere. Its normaliser uses the Kummer function
+// M(½,3/2,κ) = Σ κⁿ/((2n+1)·n!); κ is recovered from the concentration r = ⟨(μ·x)²⟩
+// (the leading scatter eigenvalue) by inverting r(κ) = M′/M. Both are computed
+// by series; large-κ falls back to the leading asymptotic.
+
+function watsonM(kappa) {
+  if (kappa > 100) return Math.exp(kappa) / (2 * kappa);
+  let term = 1, sum = 1;
+  for (let i = 1; i < 200; i++) {
+    term *= kappa / i;                 // κⁱ/i!
+    const add = term / (2 * i + 1);
+    sum += add;
+    if (add < sum * 1e-15) break;
+  }
+  return sum;
+}
+function watsonMprime(kappa) {
+  if (kappa > 100) return Math.exp(kappa) / (2 * kappa);
+  let term = 1, sum = 1 / 3;          // i=1: κ⁰/(3·0!)
+  for (let i = 2; i < 200; i++) {
+    term *= kappa / (i - 1);           // κ^{i-1}/(i-1)!
+    const add = term / (2 * i + 1);
+    sum += add;
+    if (add < sum * 1e-15) break;
+  }
+  return sum;
+}
+function rOfKappa(kappa) {
+  if (kappa < 1e-9) return 1 / 3;
+  if (kappa > 100) return 1 - 1 / (2 * kappa);
+  return watsonMprime(kappa) / watsonM(kappa);
+}
+/** Concentration κ of a Watson component from its scatter eigenvalue r ∈ [1/3,1). */
+function kappaFromR(r) {
+  if (r <= 1 / 3) return 0;
+  if (r >= 0.9995) return 200;
+  let lo = 0, hi = 200;
+  for (let it = 0; it < 80; it++) {
+    const mid = (lo + hi) / 2;
+    if (rOfKappa(mid) < r) lo = mid; else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+function lnWatsonNorm(kappa) {            // log C₃(κ), density = C·exp(κ t²)
+  const lnM = kappa > 100 ? kappa - Math.log(2 * kappa) : Math.log(watsonM(kappa));
+  return -Math.log(4 * Math.PI) - lnM;
+}
+
+// Leading eigenpair of a weighted orientation scatter Σ wᵢ xᵢxᵢᵀ / Σ wᵢ.
+function weightedAxis(dcos, weights) {
+  const T = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+  let W = 0;
+  for (let i = 0; i < dcos.length; i++) {
+    const w = weights[i], d = dcos[i];
+    if (w <= 0) continue;
+    W += w;
+    T[0] += w * d[0] * d[0]; T[1] += w * d[0] * d[1]; T[2] += w * d[0] * d[2];
+    T[4] += w * d[1] * d[1]; T[5] += w * d[1] * d[2]; T[8] += w * d[2] * d[2];
+  }
+  T[3] = T[1]; T[6] = T[2]; T[7] = T[5];
+  const inv = W > 0 ? 1 / W : 0;
+  for (let i = 0; i < 9; i++) T[i] *= inv;
+  const { values, vectors } = symmetricEigen3(T);
+  return { axis: vectors[0], concentration: values[0], weight: W };
+}
+
+function emOnce(dcos, k, centers, maxIter, tol) {
+  const n = dcos.length;
+  const mu = centers.map(c => c.slice());
+  const kappa = new Array(k).fill(10);
+  const w = new Array(k).fill(1 / k);
+  const resp = Array.from({ length: n }, () => new Array(k).fill(0));
+  let ll = -Infinity;
+
+  for (let iter = 0; iter < maxIter; iter++) {
+    // E-step
+    let newLl = 0;
+    for (let i = 0; i < n; i++) {
+      const lp = new Array(k);
+      let mx = -Infinity;
+      for (let c = 0; c < k; c++) {
+        const dot = dcos[i][0] * mu[c][0] + dcos[i][1] * mu[c][1] + dcos[i][2] * mu[c][2];
+        lp[c] = Math.log(w[c] + 1e-300) + lnWatsonNorm(kappa[c]) + kappa[c] * dot * dot;
+        if (lp[c] > mx) mx = lp[c];
+      }
+      let se = 0;
+      for (let c = 0; c < k; c++) se += Math.exp(lp[c] - mx);
+      const lse = mx + Math.log(se);
+      newLl += lse;
+      for (let c = 0; c < k; c++) resp[i][c] = Math.exp(lp[c] - lse);
+    }
+    // M-step
+    for (let c = 0; c < k; c++) {
+      const col = resp.map(r => r[c]);
+      const { axis, concentration, weight } = weightedAxis(dcos, col);
+      if (weight < 1e-6) { mu[c] = dcos[(iter + c) % n].slice(); kappa[c] = 1; w[c] = 1e-6; continue; }
+      mu[c] = axis;
+      kappa[c] = kappaFromR(Math.min(0.999, concentration));
+      w[c] = weight / n;
+    }
+    if (Math.abs(newLl - ll) < tol * Math.abs(newLl)) { ll = newLl; break; }
+    ll = newLl;
+  }
+  return { mu, kappa, w, resp, logLikelihood: ll };
+}
+
+/**
+ * Soft (probabilistic) identification of k orientation sets by Watson-mixture EM.
+ * Unlike fitSets (hard k-means), every point gets a responsibility vector across
+ * the k sets, and each component carries a proper concentration κ.
+ *
+ * @param {Array<number[]>} dcos
+ * @param {number} k
+ * @param {Object} [options] @param {number} [options.restarts=5] @param {number} [options.maxIter=100]
+ *   @param {()=>number} [options.rng=Math.random]
+ * @returns {{ components: Array<{axis:[number,number], axisDir:number[], weight:number,
+ *             kappa:number, concentration:number}>, responsibilities:number[][],
+ *             assignments:number[], logLikelihood:number, bic:number }}
+ *   components sorted by weight (desc); bic = −2·LL + (4k−1)·ln(n) for model selection.
+ */
+export function fitSetsEM(dcos, k, options = {}) {
+  const n = dcos.length;
+  if (n === 0 || k < 1) return { components: [], responsibilities: [], assignments: [], logLikelihood: 0, bic: Infinity };
+  const restarts = options.restarts || 5;
+  const maxIter = options.maxIter || 100;
+  const tol = options.tol || 1e-7;
+  const rng = options.rng || Math.random;
+
+  let best = null;
+  for (let rs = 0; rs < restarts; rs++) {
+    const res = emOnce(dcos, Math.min(k, n), seedCenters(dcos, Math.min(k, n), rng), maxIter, tol);
+    if (!best || res.logLikelihood > best.logLikelihood) best = res;
+  }
+
+  const order = best.w.map((_, i) => i).sort((a, b) => best.w[b] - best.w[a]);
+  const components = order.map(c => ({
+    axis: dcosToLine(best.mu[c]),
+    axisDir: best.mu[c],
+    weight: best.w[c],
+    kappa: best.kappa[c],
+    concentration: rOfKappa(best.kappa[c]),
+  }));
+  const responsibilities = best.resp.map(r => order.map(c => r[c]));
+  const assignments = responsibilities.map(r => {
+    let bi = 0; for (let c = 1; c < r.length; c++) if (r[c] > r[bi]) bi = c; return bi;
+  });
+  const bic = -2 * best.logLikelihood + (4 * k - 1) * Math.log(n);
+  return { components, responsibilities, assignments, logLikelihood: best.logLikelihood, bic };
+}
+
+/**
+ * Choose the number of sets by BIC: fit Watson mixtures for k = kMin…kMax and
+ * return the model with the lowest BIC.
+ * @param {Array<number[]>} dcos
+ * @param {Object} [options] @param {number} [options.kMin=1] @param {number} [options.kMax=5] plus fitSetsEM options
+ * @returns {{ best:Object, bestK:number, bics:Array<{k:number,bic:number}> }}
+ */
+export function selectSets(dcos, options = {}) {
+  const kMin = options.kMin || 1;
+  const kMax = options.kMax || 5;
+  const rng = options.rng || Math.random;
+  let best = null, bestK = kMin;
+  const bics = [];
+  for (let k = kMin; k <= kMax; k++) {
+    const fit = fitSetsEM(dcos, k, { ...options, rng });
+    bics.push({ k, bic: fit.bic });
+    if (!best || fit.bic < best.bic) { best = fit; bestK = k; }
+  }
+  return { best, bestK, bics };
+}

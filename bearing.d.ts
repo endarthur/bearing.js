@@ -326,10 +326,31 @@ export namespace compass {
 export interface OrientationSet {
   axis: Attitude; axisDir: Dcos; size: number; fraction: number; concentration: number; members: number[];
 }
+export interface MixtureComponent {
+  axis: Attitude; axisDir: Dcos; weight: number; kappa: number; concentration: number;
+}
+export interface MixtureFit {
+  components: MixtureComponent[]; responsibilities: number[][]; assignments: number[];
+  logLikelihood: number; bic: number;
+}
 export namespace cluster {
   function fitSets(dcos: Dcos[], k: number, options?: {
     restarts?: number; maxIter?: number; rng?: () => number;
   }): { clusters: OrientationSet[]; assignments: number[]; cost: number };
+  function fitSetsEM(dcos: Dcos[], k: number, options?: {
+    restarts?: number; maxIter?: number; tol?: number; rng?: () => number;
+  }): MixtureFit;
+  function selectSets(dcos: Dcos[], options?: {
+    kMin?: number; kMax?: number; restarts?: number; maxIter?: number; rng?: () => number;
+  }): { best: MixtureFit; bestK: number; bics: Array<{ k: number; bic: number }> };
+}
+
+export interface FabricDataset { dcos: Dcos[]; color?: string; label?: string; }
+export namespace fabricplot {
+  function woodcockPoint(dcos: Dcos[]): { x: number; y: number; K: number; C: number; eigenvalues: number[] };
+  function woodcockSVG(datasets: Dcos[] | FabricDataset[], options?: { [key: string]: any }): string;
+  function vollmerPoint(dcos: Dcos[]): { P: number; G: number; R: number };
+  function vollmerSVG(datasets: Dcos[] | FabricDataset[], options?: { [key: string]: any }): string;
 }
 
 export namespace simulate {

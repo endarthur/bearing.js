@@ -20,7 +20,8 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
 - Fault-slip & paleostress: kinematic P/T axes, right-dihedra field, Michael (1984) stress inversion
-- Automatic set identification (axial k-means clustering of orientations)
+- Set identification: axial k-means + soft Watson-mixture EM (BIC chooses the number of sets)
+- Fabric diagrams: Woodcock K–C, Vollmer P–G–R ternary
 - Synthetic sampling: Fisher draws, smoothed bootstrap, uniform + concentrated rotation sampling
 - Rotation analysis (SO(3)): quaternions, foliation∧lineation frames, misorientation, mean rotation
 - Rotation-notation conversions: 24 Euler conventions with per-axis sign flags; dip/dipdir/rake (Leapfrog, Isatis), Bunge, GSLIB presets
@@ -77,7 +78,8 @@ npm run build
 | `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
 | `fault` | Fault-slip kinematics: P/T axes, Angelier dihedra, Michael (1984) paleostress inversion |
-| `cluster` | Automatic orientation-set identification (axial k-means) |
+| `cluster` | Orientation-set identification: k-means + Watson-mixture EM with BIC model selection |
+| `fabricplot` | Fabric diagnostic diagrams: Woodcock K–C plot, Vollmer P–G–R ternary |
 | `simulate` | Fisher sampling + Fisher-kernel smoothed bootstrap (synthetic fabrics) |
 | `compass` | Device-orientation → attitude (`planeFromDeviceOrientation`, `lineFromDeviceOrientation`) |
 | `color` | Named colour scales + value→colour mapping (`colorScale`, `sampleScale`, `mapValue`) |
@@ -146,7 +148,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-458 tests using Node.js built-in test runner.
+470 tests using Node.js built-in test runner.
 
 ## License
 

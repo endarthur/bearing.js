@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { fitSets } from '../src/cluster.js';
+import { fitSets, fitSetsEM, selectSets } from '../src/cluster.js';
 import { lineToDcos } from '../src/core/conversions.js';
 import * as vec3 from '../src/core/vec3.js';
 
@@ -81,5 +81,50 @@ describe('fitSets', () => {
     const { clusters, assignments } = fitSets([], 2);
     assert.deepStrictEqual(clusters, []);
     assert.deepStrictEqual(assignments, []);
+  });
+});
+
+describe('fitSetsEM (Watson mixture)', () => {
+  it('recovers two well-separated sets with near-equal weights', () => {
+    const { components } = fitSetsEM(data, 2, { rng: seeded(1) });
+    assert.strictEqual(components.length, 2);
+    const dirA = lineToDcos(A[0], A[1]);
+    const dirB = lineToDcos(B[0], B[1]);
+    assert.ok(components.some(c => adot(c.axisDir, dirA) > 0.99), 'set A recovered');
+    assert.ok(components.some(c => adot(c.axisDir, dirB) > 0.99), 'set B recovered');
+    for (const c of components) assert.ok(c.weight > 0.35 && c.weight < 0.65, `weight ${c.weight}`);
+  });
+
+  it('gives soft responsibilities that sum to 1', () => {
+    const { responsibilities } = fitSetsEM(data, 2, { rng: seeded(2) });
+    for (const r of responsibilities) assert.ok(Math.abs(r[0] + r[1] - 1) < 1e-9);
+    // points deep in a set are assigned with high confidence
+    assert.ok(Math.max(...responsibilities[0]) > 0.9);
+  });
+
+  it('higher concentration κ for a tight component', () => {
+    const tight = Array.from({ length: 40 }, (_, i) => lineToDcos(45 + (i % 3 - 1) * 0.5, 30 + (i % 2) * 0.5));
+    const { components } = fitSetsEM(tight, 1, { rng: seeded(3) });
+    assert.ok(components[0].kappa > 20, `κ ${components[0].kappa}`);
+  });
+
+  it('is deterministic with a seeded rng', () => {
+    assert.deepStrictEqual(
+      fitSetsEM(data, 2, { rng: seeded(9) }).assignments,
+      fitSetsEM(data, 2, { rng: seeded(9) }).assignments,
+    );
+  });
+});
+
+describe('selectSets (BIC model selection)', () => {
+  it('selects k = 2 for a clearly bimodal sample', () => {
+    const { bestK, bics } = selectSets(data, { kMin: 1, kMax: 4, rng: seeded(4) });
+    assert.strictEqual(bestK, 2, `bestK ${bestK}; bics ${JSON.stringify(bics)}`);
+  });
+
+  it('selects k = 1 for a single cluster', () => {
+    const one = [];
+    for (let i = 0; i < 40; i++) one.push(lineToDcos(120 + (i % 5 - 2) * 2, 40 + (i % 4 - 2) * 2));
+    assert.strictEqual(selectSets(one, { kMin: 1, kMax: 3, rng: seeded(5) }).bestK, 1);
   });
 });
