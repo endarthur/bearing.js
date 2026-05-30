@@ -126,7 +126,7 @@ export function densityGrid(dcos, options = {}) {
 
 export function computeContours(dcos, options = {}) {
   const { levels = [2, 4, 6, 8] } = options;
-  if (dcos.length === 0) return levels.map(level => ({ level, paths: [] }));
+  if (!options.grid && dcos.length === 0) return levels.map(level => ({ level, paths: [] }));
 
   const { grid, gridSize, step, projR } = options.grid || densityGrid(dcos, options);
 

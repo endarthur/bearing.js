@@ -1567,6 +1567,7 @@ var bearing = (() => {
     densityGrid: () => densityGrid,
     equalAngle: () => equal_angle_exports,
     equalArea: () => equal_area_exports,
+    fault: () => fault_exports,
     generateNet: () => generateNet,
     io: () => io_exports,
     mat3: () => mat3_exports,
@@ -2316,7 +2317,7 @@ var bearing = (() => {
   }
   function computeContours(dcos, options = {}) {
     const { levels = [2, 4, 6, 8] } = options;
-    if (dcos.length === 0) return levels.map((level) => ({ level, paths: [] }));
+    if (!options.grid && dcos.length === 0) return levels.map((level) => ({ level, paths: [] }));
     const { grid, gridSize, step, projR } = options.grid || densityGrid(dcos, options);
     return levels.map((level) => ({
       level,
@@ -4417,6 +4418,122 @@ var bearing = (() => {
     const dirENU = [R[1], R[4], R[7]];
     const [trend, plunge] = dcosToLine(enuToBearing(dirENU));
     return [applyDeclination(trend, options.declination), plunge];
+  }
+
+  // src/fault.js
+  var fault_exports = {};
+  __export(fault_exports, {
+    dihedraGrid: () => dihedraGrid,
+    dipVector: () => dipVector,
+    michael: () => michael,
+    principalStresses: () => principalStresses,
+    ptAxes: () => ptAxes,
+    resolveSense: () => resolveSense
+  });
+  function dipVector(normal) {
+    let n = normalize(normal);
+    if (n[2] > 0) n = negate(n);
+    const down = [0, 0, -1];
+    const proj = sub(down, scale(n, dot(down, n)));
+    const len = length(proj);
+    return len < 1e-10 ? [1, 0, 0] : scale(proj, 1 / len);
+  }
+  function resolveSense(normal, line, sense) {
+    let n = normalize(normal);
+    if (n[2] > 0) n = negate(n);
+    const s = String(sense).toLowerCase()[0];
+    if (s === "u" || s === "f" || s === "0" || s === "5" || s === "?") return { slip: line, defined: false };
+    if (s === "n" || s === "2" || s === "-") return { slip: line, defined: true };
+    if (s === "i" || s === "1" || s === "+") return { slip: negate(line), defined: true };
+    const lineSense = dot(dipVector(n), line);
+    if (s === "d" || s === "3") return { slip: lineSense > 0 ? line : negate(line), defined: true };
+    if (s === "s" || s === "4") return { slip: lineSense < 0 ? line : negate(line), defined: true };
+    return { slip: line, defined: true };
+  }
+  function ptAxes(normal, slip) {
+    const n = normalize(normal);
+    const s = normalize(slip);
+    return { p: normalize(sub(n, s)), t: normalize(add(n, s)) };
+  }
+  function solveLinear(M, b) {
+    const n = b.length;
+    const A = M.map((row, i) => row.concat(b[i]));
+    for (let col = 0; col < n; col++) {
+      let piv = col;
+      for (let r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+      [A[col], A[piv]] = [A[piv], A[col]];
+      const d = A[col][col];
+      if (Math.abs(d) < 1e-300) continue;
+      for (let r = 0; r < n; r++) {
+        if (r === col) continue;
+        const f = A[r][col] / d;
+        for (let c = col; c <= n; c++) A[r][c] -= f * A[col][c];
+      }
+    }
+    return A.map((row, i) => row[n] / A[i][i]);
+  }
+  function michael(planes, slips) {
+    const AtA = Array.from({ length: 5 }, () => new Array(5).fill(0));
+    const Atb = new Array(5).fill(0);
+    let btb = 0;
+    for (let i = 0; i < planes.length; i++) {
+      const [n1, n2, n3] = planes[i];
+      const s = slips[i];
+      const rows = [
+        [n1 - n1 ** 3 + n1 * n3 ** 2, n2 - 2 * n2 * n1 ** 2, n3 - 2 * n3 * n1 ** 2, -n1 * n2 ** 2 + n1 * n3 ** 2, -2 * n1 * n2 * n3],
+        [-n2 * n1 ** 2 + n2 * n3 ** 2, n1 - 2 * n1 * n2 ** 2, -2 * n1 * n2 * n3, n2 - n2 ** 3 + n2 * n3 ** 2, n3 - 2 * n3 * n2 ** 2],
+        [-n3 * n1 ** 2 - n3 + n3 ** 3, -2 * n1 * n2 * n3, n1 - 2 * n1 * n3 ** 2, -(n2 ** 2) * n3 - n3 + n3 ** 3, n2 - 2 * n2 * n3 ** 2]
+      ];
+      for (let k = 0; k < 3; k++) {
+        const row = rows[k], bk = s[k];
+        btb += bk * bk;
+        for (let a = 0; a < 5; a++) {
+          Atb[a] += row[a] * bk;
+          for (let c = 0; c < 5; c++) AtA[a][c] += row[a] * row[c];
+        }
+      }
+    }
+    const x = solveLinear(AtA, Atb);
+    let residual = btb;
+    for (let a = 0; a < 5; a++) residual -= x[a] * Atb[a];
+    const [s11, s12, s13, s22, s23] = x.map((v) => -v);
+    const stress = [s11, s12, s13, s12, s22, s23, s13, s23, -(s11 + s22)];
+    return { stress, residual: Math.max(0, residual) };
+  }
+  function principalStresses(stress) {
+    const { values, vectors } = symmetricEigen3(stress);
+    return { axes: [vectors[2], vectors[1], vectors[0]], values: [values[2], values[1], values[0]] };
+  }
+  function dihedraGrid(planes, slips, options = {}) {
+    const projection = options.projection || "equal-area";
+    const gridSize = options.gridSize || 40;
+    const projR = projection === "equal-angle" ? 1 : Math.SQRT2;
+    const step = 2 * projR / (gridSize - 1);
+    const grid = new Float64Array(gridSize * gridSize);
+    const inverseFn = projection === "equal-angle" ? inverse2 : inverse;
+    const m = planes.length || 1;
+    for (let j = 0; j < gridSize; j++) {
+      const py = projR - j * step;
+      for (let i = 0; i < gridSize; i++) {
+        const px = -projR + i * step;
+        if (px * px + py * py > projR * projR * 1.02) {
+          grid[j * gridSize + i] = NaN;
+          continue;
+        }
+        const d = inverseFn(px, py);
+        if (!d) {
+          grid[j * gridSize + i] = NaN;
+          continue;
+        }
+        let sum = 0;
+        for (let k = 0; k < planes.length; k++) {
+          const n = planes[k], s = slips[k];
+          sum += 2 * (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) * (d[0] * s[0] + d[1] * s[1] + d[2] * s[2]);
+        }
+        grid[j * gridSize + i] = sum / m;
+      }
+    }
+    return { grid, gridSize, step, projR, projection };
   }
 
   // src/color.js

@@ -19,6 +19,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Bootstrap confidence regions (non-parametric cone for the mean, ellipse for eigenvectors)
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
+- Fault-slip & paleostress: kinematic P/T axes, right-dihedra field, Michael (1984) stress inversion
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
 - Rose diagrams (axial/directional binning, petal geometry, SVG output)
 - Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
@@ -71,6 +72,7 @@ npm run build
 | `circular` | Circular (azimuthal) statistics: mean, R, von Mises κ, Rayleigh test |
 | `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
+| `fault` | Fault-slip kinematics: P/T axes, Angelier dihedra, Michael (1984) paleostress inversion |
 | `compass` | Device-orientation → attitude (`planeFromDeviceOrientation`, `lineFromDeviceOrientation`) |
 | `color` | Named colour scales + value→colour mapping (`colorScale`, `sampleScale`, `mapValue`) |
 | `io` | Parse attitude strings and text blocks |
@@ -136,7 +138,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-383 tests using Node.js built-in test runner.
+393 tests using Node.js built-in test runner.
 
 ## License
 

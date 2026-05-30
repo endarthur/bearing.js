@@ -14,6 +14,7 @@ export * as circular from './circular.js';
 export * as rose from './rose.js';
 export * as analysis from './analysis.js';
 export * as compass from './compass.js';
+export * as fault from './fault.js';
 export * as color from './color.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';

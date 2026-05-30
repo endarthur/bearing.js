@@ -257,6 +257,15 @@ export namespace analysis {
   function unfold(dcos: Dcos[], dipDir: number, dip: number): Dcos[];
 }
 
+export namespace fault {
+  function dipVector(normal: Dcos): Dcos;
+  function resolveSense(normal: Dcos, line: Dcos, sense: string | number): { slip: Dcos; defined: boolean };
+  function ptAxes(normal: Dcos, slip: Dcos): { p: Dcos; t: Dcos };
+  function michael(planes: Dcos[], slips: Dcos[]): { stress: Mat3; residual: number };
+  function principalStresses(stress: Mat3): { axes: Dcos[]; values: number[] };
+  function dihedraGrid(planes: Dcos[], slips: Dcos[], options?: { projection?: Projection; gridSize?: number }): DensityGrid;
+}
+
 export interface DeviceOrientationOptions { declination?: number; }
 export namespace compass {
   function deviceOrientationMatrix(alpha: number, beta: number, gamma: number): Mat3;
@@ -272,7 +281,7 @@ export namespace color {
 }
 
 export interface DensityGrid {
-  grid: Float64Array; gridSize: number; step: number; projR: number; projection: string; method: string;
+  grid: Float64Array; gridSize: number; step: number; projR: number; projection: string; method?: string;
 }
 export function computeContours(dcos: Dcos[], options?: ContourOptions & { grid?: DensityGrid }): Array<{ level: number; paths: number[][][] }>;
 export function densityGrid(dcos: Dcos[], options?: ContourOptions): DensityGrid;
