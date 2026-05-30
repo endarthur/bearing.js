@@ -282,6 +282,14 @@ export namespace cluster {
   }): { clusters: OrientationSet[]; assignments: number[]; cost: number };
 }
 
+export namespace simulate {
+  function defaultKappa(n: number): number;
+  function sampleFisher(mean: Dcos, kappa: number, n: number, rng?: () => number): Dcos[];
+  function smoothedBootstrap(dcos: Dcos[], m?: number, options?: {
+    kappa?: number; lowerHemisphere?: boolean; rng?: () => number;
+  }): Dcos[];
+}
+
 export namespace color {
   const scales: { [name: string]: number[][] };
   function sampleScale(name: string, t: number): string;

@@ -1574,6 +1574,7 @@ var bearing = (() => {
     mat3: () => mat3_exports,
     mergeStyles: () => deepMerge,
     rose: () => rose_exports,
+    simulate: () => simulate_exports,
     statistics: () => statistics_exports,
     styleDefaults: () => defaults,
     symmetricEigen3: () => symmetricEigen3,
@@ -2032,35 +2033,35 @@ var bearing = (() => {
     return type === "polar" ? generatePolarNet(interval) : generateEquatorialNet(interval);
   }
   function generateEquatorialNet(interval) {
-    const DEG7 = Math.PI / 180;
+    const DEG8 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let alpha = 0; alpha < 180; alpha += interval) {
-      const alphaR = alpha * DEG7;
+      const alphaR = alpha * DEG8;
       greatCircles.push(
         greatCircle([Math.sin(alphaR), 0, Math.cos(alphaR)], 360)
       );
     }
     for (let alpha = interval; alpha < 180; alpha += interval) {
       smallCircles.push(
-        smallCircle([0, 1, 0], alpha * DEG7, 360)
+        smallCircle([0, 1, 0], alpha * DEG8, 360)
       );
     }
     return { greatCircles, smallCircles };
   }
   function generatePolarNet(interval) {
-    const DEG7 = Math.PI / 180;
+    const DEG8 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let az = 0; az < 180; az += interval) {
-      const azR = az * DEG7;
+      const azR = az * DEG8;
       greatCircles.push(
         greatCircle([Math.cos(azR), -Math.sin(azR), 0], 360)
       );
     }
     for (let dip = interval; dip <= 90; dip += interval) {
       smallCircles.push(
-        smallCircle([0, 0, -1], dip * DEG7, 360)
+        smallCircle([0, 0, -1], dip * DEG8, 360)
       );
     }
     return { greatCircles, smallCircles };
@@ -4657,6 +4658,63 @@ var bearing = (() => {
     clusters.forEach((c, newIdx) => c.members.forEach((i) => remap.set(i, newIdx)));
     const assignments = best.assign.map((_, i) => remap.get(i));
     return { clusters, assignments, cost: best.cost };
+  }
+
+  // src/simulate.js
+  var simulate_exports = {};
+  __export(simulate_exports, {
+    defaultKappa: () => defaultKappa,
+    sampleFisher: () => sampleFisher,
+    smoothedBootstrap: () => smoothedBootstrap
+  });
+  var DEG7 = Math.PI / 180;
+  function tangentBasis2(mu) {
+    const ref = Math.abs(mu[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const u = normalize(cross(mu, ref));
+    return [u, cross(mu, u)];
+  }
+  function defaultKappa(n) {
+    const sigma = 90 / Math.sqrt(Math.max(1, n)) * DEG7;
+    return 1 / (1 - Math.cos(sigma));
+  }
+  function sampleFisher(mean, kappa, n, rng = Math.random) {
+    const mu = normalize(mean);
+    const [u, v] = tangentBasis2(mu);
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const U = rng();
+      let w = kappa < 1e-6 ? 2 * U - 1 : 1 + Math.log(U + (1 - U) * Math.exp(-2 * kappa)) / kappa;
+      w = Math.max(-1, Math.min(1, w));
+      const phi = 2 * Math.PI * rng();
+      const s = Math.sqrt(Math.max(0, 1 - w * w));
+      const cp = Math.cos(phi), sp = Math.sin(phi);
+      out.push([
+        s * (cp * u[0] + sp * v[0]) + w * mu[0],
+        s * (cp * u[1] + sp * v[1]) + w * mu[1],
+        s * (cp * u[2] + sp * v[2]) + w * mu[2]
+      ]);
+    }
+    return out;
+  }
+  function smoothedBootstrap(dcos, m, options = {}) {
+    const n = dcos.length;
+    if (n === 0) return [];
+    const count = m != null ? m : n;
+    const rng = options.rng || Math.random;
+    const kappa = options.kappa != null ? options.kappa : defaultKappa(n);
+    const fold = options.lowerHemisphere !== false;
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const d = dcos[rng() * n | 0];
+      const p = sampleFisher(d, kappa, 1, rng)[0];
+      if (fold && p[2] > 0) {
+        p[0] = -p[0];
+        p[1] = -p[1];
+        p[2] = -p[2];
+      }
+      out.push(p);
+    }
+    return out;
   }
 
   // src/color.js

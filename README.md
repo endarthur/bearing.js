@@ -21,6 +21,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
 - Fault-slip & paleostress: kinematic P/T axes, right-dihedra field, Michael (1984) stress inversion
 - Automatic set identification (axial k-means clustering of orientations)
+- Synthetic sampling: Fisher draws + Fisher-kernel smoothed bootstrap (non-parametric simulation)
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
 - Rose diagrams (axial/directional binning, petal geometry, SVG output)
 - Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
@@ -75,6 +76,7 @@ npm run build
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
 | `fault` | Fault-slip kinematics: P/T axes, Angelier dihedra, Michael (1984) paleostress inversion |
 | `cluster` | Automatic orientation-set identification (axial k-means) |
+| `simulate` | Fisher sampling + Fisher-kernel smoothed bootstrap (synthetic fabrics) |
 | `compass` | Device-orientation → attitude (`planeFromDeviceOrientation`, `lineFromDeviceOrientation`) |
 | `color` | Named colour scales + value→colour mapping (`colorScale`, `sampleScale`, `mapValue`) |
 | `io` | Parse attitude strings and text blocks |
@@ -140,7 +142,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-401 tests using Node.js built-in test runner.
+411 tests using Node.js built-in test runner.
 
 ## License
 
