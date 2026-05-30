@@ -181,6 +181,19 @@ export namespace rotation {
   function meanRotation(rotations: Mat3[]): { mean: Mat3; quaternion: Quat; concentration: number; spread: number };
 }
 
+export interface EulerOptions { intrinsic?: boolean; radians?: boolean; }
+export namespace euler {
+  function eulerToMatrix(angles: number[], order?: string, options?: EulerOptions): Mat3;
+  function matrixToEuler(R: Mat3, order?: string, options?: EulerOptions): number[];
+  function eulerToQuat(angles: number[], order?: string, options?: EulerOptions): Quat;
+  function quatToEuler(q: Quat, order?: string, options?: EulerOptions): number[];
+  const conventions: { [name: string]: { order: string; intrinsic: boolean } };
+  function bungeToMatrix(phi1: number, Phi: number, phi2: number, options?: { radians?: boolean }): Mat3;
+  function matrixToBunge(R: Mat3, options?: { radians?: boolean }): number[];
+  function gslibToMatrix(ang1: number, ang2: number, ang3: number): Mat3;
+  function matrixToGslib(R: Mat3): number[];
+}
+
 export namespace curves {
   function greatCircle(pole: Dcos, nPoints?: number): Dcos[];
   function smallCircle(axis: Dcos, halfAngle: number, nPoints?: number): Dcos[];

@@ -19,6 +19,7 @@ export * as fault from './fault.js';
 export * as cluster from './cluster.js';
 export * as simulate from './simulate.js';
 export * as rotation from './rotation.js';
+export * as euler from './euler.js';
 export * as color from './color.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';

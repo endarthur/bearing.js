@@ -23,6 +23,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Automatic set identification (axial k-means clustering of orientations)
 - Synthetic sampling: Fisher draws + Fisher-kernel smoothed bootstrap (non-parametric simulation)
 - Rotation analysis (SO(3)): quaternions, foliation∧lineation frames, misorientation, mean rotation
+- Rotation-notation conversions: any of the 24 Euler conventions, crystallographic Bunge, GSLIB anisotropy angles
 - Attitude I/O: dip-direction/dip, strike/dip, quadrant notation
 - Rose diagrams (axial/directional binning, petal geometry, SVG output)
 - Arcball drag-rotation primitive (frame-consistent, no gimbal flip)
@@ -84,6 +85,7 @@ npm run build
 | `equalArea` / `equalAngle` | Projection functions |
 | `vec3` / `mat3` / `quat` | 3D vector, matrix, and quaternion operations |
 | `rotation` | SO(3) analysis: plane∧lineation frames, misorientation, mean rotation, slerp |
+| `euler` | Rotation-notation conversions: all 24 Euler conventions ↔ matrix/quaternion, Bunge, GSLIB |
 | `curves` | Small circles, great circles as point sequences |
 | `computeContours` | Kernel-density contour lines |
 | `densityGrid` | Fisher-kernel density raster (MUD), reusable for heatmaps |
@@ -144,7 +146,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-428 tests using Node.js built-in test runner.
+437 tests using Node.js built-in test runner.
 
 ## License
 

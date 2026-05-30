@@ -1568,6 +1568,7 @@ var bearing = (() => {
     densityGrid: () => densityGrid,
     equalAngle: () => equal_angle_exports,
     equalArea: () => equal_area_exports,
+    euler: () => euler_exports,
     fault: () => fault_exports,
     generateNet: () => generateNet,
     io: () => io_exports,
@@ -2035,35 +2036,35 @@ var bearing = (() => {
     return type === "polar" ? generatePolarNet(interval) : generateEquatorialNet(interval);
   }
   function generateEquatorialNet(interval) {
-    const DEG8 = Math.PI / 180;
+    const DEG9 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let alpha = 0; alpha < 180; alpha += interval) {
-      const alphaR = alpha * DEG8;
+      const alphaR = alpha * DEG9;
       greatCircles.push(
         greatCircle([Math.sin(alphaR), 0, Math.cos(alphaR)], 360)
       );
     }
     for (let alpha = interval; alpha < 180; alpha += interval) {
       smallCircles.push(
-        smallCircle([0, 1, 0], alpha * DEG8, 360)
+        smallCircle([0, 1, 0], alpha * DEG9, 360)
       );
     }
     return { greatCircles, smallCircles };
   }
   function generatePolarNet(interval) {
-    const DEG8 = Math.PI / 180;
+    const DEG9 = Math.PI / 180;
     const greatCircles = [];
     const smallCircles = [];
     for (let az = 0; az < 180; az += interval) {
-      const azR = az * DEG8;
+      const azR = az * DEG9;
       greatCircles.push(
         greatCircle([Math.cos(azR), -Math.sin(azR), 0], 360)
       );
     }
     for (let dip = interval; dip <= 90; dip += interval) {
       smallCircles.push(
-        smallCircle([0, 0, -1], dip * DEG8, 360)
+        smallCircle([0, 0, -1], dip * DEG9, 360)
       );
     }
     return { greatCircles, smallCircles };
@@ -4912,6 +4913,147 @@ var bearing = (() => {
     let spread = 0;
     for (const R of rotations) spread += misorientation(mean, R).angle;
     return { mean, quaternion: meanQ, concentration: value, spread: spread / n };
+  }
+
+  // src/euler.js
+  var euler_exports = {};
+  __export(euler_exports, {
+    bungeToMatrix: () => bungeToMatrix,
+    conventions: () => conventions,
+    eulerToMatrix: () => eulerToMatrix,
+    eulerToQuat: () => eulerToQuat,
+    gslibToMatrix: () => gslibToMatrix,
+    matrixToBunge: () => matrixToBunge,
+    matrixToEuler: () => matrixToEuler,
+    matrixToGslib: () => matrixToGslib,
+    quatToEuler: () => quatToEuler
+  });
+  var DEG8 = Math.PI / 180;
+  var AXIS = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
+  var IDX = { X: 0, Y: 1, Z: 2 };
+  var EUL_NEXT = [1, 2, 0, 1];
+  function eulerToMatrix(angles, order = "XYZ", options = {}) {
+    const o = order.toUpperCase();
+    const k = options.radians ? 1 : DEG8;
+    const Ra = rotationFromAxisAngle(AXIS[o[0]], angles[0] * k);
+    const Rb = rotationFromAxisAngle(AXIS[o[1]], angles[1] * k);
+    const Rc = rotationFromAxisAngle(AXIS[o[2]], angles[2] * k);
+    return options.intrinsic ? multiply(Ra, multiply(Rb, Rc)) : multiply(Rc, multiply(Rb, Ra));
+  }
+  function getOrd(order) {
+    const i = IDX[order[0]], mid = IDX[order[1]], last = IDX[order[2]];
+    const rep = order[0] === order[2];
+    let parity;
+    if (rep) {
+      parity = EUL_NEXT[i] === mid ? 0 : 1;
+    } else {
+      const even = i === 0 && mid === 1 && last === 2 || i === 1 && mid === 2 && last === 0 || i === 2 && mid === 0 && last === 1;
+      parity = even ? 0 : 1;
+    }
+    return { i, j: EUL_NEXT[i + parity], k: EUL_NEXT[i + 1 - parity], rep, parity };
+  }
+  function extractExtrinsic(R, order) {
+    const { i, j, k, rep, parity } = getOrd(order);
+    const M = (r, c2) => R[r * 3 + c2];
+    let a, b, c;
+    if (rep) {
+      const sy = Math.hypot(M(i, j), M(i, k));
+      if (sy > 1e-12) {
+        a = Math.atan2(M(i, j), M(i, k));
+        b = Math.atan2(sy, M(i, i));
+        c = Math.atan2(M(j, i), -M(k, i));
+      } else {
+        a = Math.atan2(-M(j, k), M(j, j));
+        b = Math.atan2(sy, M(i, i));
+        c = 0;
+      }
+    } else {
+      const cy = Math.hypot(M(i, i), M(j, i));
+      if (cy > 1e-12) {
+        a = Math.atan2(M(k, j), M(k, k));
+        b = Math.atan2(-M(k, i), cy);
+        c = Math.atan2(M(j, i), M(i, i));
+      } else {
+        a = Math.atan2(-M(j, k), M(j, j));
+        b = Math.atan2(-M(k, i), cy);
+        c = 0;
+      }
+    }
+    if (parity) {
+      a = -a;
+      b = -b;
+      c = -c;
+    }
+    return [a, b, c];
+  }
+  function matrixToEuler(R, order = "XYZ", options = {}) {
+    const o = order.toUpperCase();
+    let res;
+    if (options.intrinsic) {
+      const e = extractExtrinsic(R, o[2] + o[1] + o[0]);
+      res = [e[2], e[1], e[0]];
+    } else {
+      res = extractExtrinsic(R, o);
+    }
+    const div = options.radians ? 1 : DEG8;
+    return res.map((v) => v / div);
+  }
+  function eulerToQuat(angles, order = "XYZ", options = {}) {
+    return fromMatrix(eulerToMatrix(angles, order, options));
+  }
+  function quatToEuler(q, order = "XYZ", options = {}) {
+    return matrixToEuler(toMatrix(q), order, options);
+  }
+  var conventions = {
+    bunge: { order: "ZXZ", intrinsic: true },
+    // crystallography (φ1, Φ, φ2)
+    xyz: { order: "XYZ", intrinsic: false },
+    zyx: { order: "ZYX", intrinsic: false }
+    // yaw-pitch-roll (aerospace, extrinsic)
+  };
+  function bungeToMatrix(phi1, Phi, phi2, options = {}) {
+    return eulerToMatrix([phi1, Phi, phi2], "ZXZ", { intrinsic: true, radians: options.radians });
+  }
+  function matrixToBunge(R, options = {}) {
+    return matrixToEuler(R, "ZXZ", { intrinsic: true, radians: options.radians });
+  }
+  function gslibToMatrix(ang1, ang2, ang3) {
+    const alpha = (ang1 >= 0 && ang1 < 270 ? 90 - ang1 : 450 - ang1) * DEG8;
+    const beta = -ang2 * DEG8;
+    const theta = ang3 * DEG8;
+    const sa = Math.sin(alpha), ca = Math.cos(alpha);
+    const sb = Math.sin(beta), cb = Math.cos(beta);
+    const st = Math.sin(theta), ct = Math.cos(theta);
+    return [
+      cb * ca,
+      cb * sa,
+      -sb,
+      -ct * sa + st * sb * ca,
+      ct * ca + st * sb * sa,
+      st * cb,
+      st * sa + ct * sb * ca,
+      -st * ca + ct * sb * sa,
+      ct * cb
+    ];
+  }
+  function matrixToGslib(R) {
+    const M = (r, c) => R[r * 3 + c];
+    const sb = -M(0, 2);
+    const beta = Math.asin(Math.max(-1, Math.min(1, sb)));
+    const cb = Math.cos(beta);
+    let alpha, theta;
+    if (Math.abs(cb) > 1e-9) {
+      alpha = Math.atan2(M(0, 1), M(0, 0));
+      theta = Math.atan2(M(1, 2), M(2, 2));
+    } else {
+      alpha = Math.atan2(-M(1, 0), M(1, 1));
+      theta = 0;
+    }
+    let ang1 = 90 - alpha / DEG8;
+    ang1 = (ang1 % 360 + 360) % 360;
+    const ang2 = -beta / DEG8;
+    const ang3 = theta / DEG8;
+    return [ang1, ang2, ang3];
   }
 
   // src/color.js
