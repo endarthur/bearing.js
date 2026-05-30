@@ -273,6 +273,15 @@ export namespace compass {
   function lineFromDeviceOrientation(alpha: number, beta: number, gamma: number, options?: DeviceOrientationOptions): Attitude;
 }
 
+export interface OrientationSet {
+  axis: Attitude; axisDir: Dcos; size: number; fraction: number; concentration: number; members: number[];
+}
+export namespace cluster {
+  function fitSets(dcos: Dcos[], k: number, options?: {
+    restarts?: number; maxIter?: number; rng?: () => number;
+  }): { clusters: OrientationSet[]; assignments: number[]; cost: number };
+}
+
 export namespace color {
   const scales: { [name: string]: number[][] };
   function sampleScale(name: string, t: number): string;

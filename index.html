@@ -1559,6 +1559,7 @@ var bearing = (() => {
     analysis: () => analysis_exports,
     cardinalPoints: () => cardinalPoints,
     circular: () => circular_exports,
+    cluster: () => cluster_exports,
     color: () => color_exports,
     compass: () => compass_exports,
     computeContours: () => computeContours,
@@ -4534,6 +4535,128 @@ var bearing = (() => {
       }
     }
     return { grid, gridSize, step, projR, projection };
+  }
+
+  // src/cluster.js
+  var cluster_exports = {};
+  __export(cluster_exports, {
+    fitSets: () => fitSets
+  });
+  function leadingAxis(members) {
+    const T = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    for (const d of members) {
+      T[0] += d[0] * d[0];
+      T[1] += d[0] * d[1];
+      T[2] += d[0] * d[2];
+      T[4] += d[1] * d[1];
+      T[5] += d[1] * d[2];
+      T[8] += d[2] * d[2];
+    }
+    T[3] = T[1];
+    T[6] = T[2];
+    T[7] = T[5];
+    const n = members.length || 1;
+    for (let i = 0; i < 9; i++) T[i] /= n;
+    const { values, vectors } = symmetricEigen3(T);
+    return { axis: vectors[0], concentration: values[0] };
+  }
+  var adot = (a, b) => Math.abs(a[0] * b[0] + a[1] * b[1] + a[2] * b[2]);
+  function runOnce(dcos, centers, maxIter) {
+    const n = dcos.length;
+    const assign = new Array(n).fill(0);
+    let cost = Infinity;
+    for (let iter = 0; iter < maxIter; iter++) {
+      let changed = false;
+      for (let i = 0; i < n; i++) {
+        let best = 0, bestSim = -1;
+        for (let c = 0; c < centers.length; c++) {
+          const sim = adot(dcos[i], centers[c]);
+          if (sim > bestSim) {
+            bestSim = sim;
+            best = c;
+          }
+        }
+        if (assign[i] !== best) {
+          assign[i] = best;
+          changed = true;
+        }
+      }
+      for (let c = 0; c < centers.length; c++) {
+        const members = [];
+        for (let i = 0; i < n; i++) if (assign[i] === c) members.push(dcos[i]);
+        if (members.length === 0) {
+          let worst = 0, worstSim = Infinity;
+          for (let i = 0; i < n; i++) {
+            const sim = adot(dcos[i], centers[assign[i]]);
+            if (sim < worstSim) {
+              worstSim = sim;
+              worst = i;
+            }
+          }
+          centers[c] = dcos[worst].slice();
+        } else {
+          centers[c] = leadingAxis(members).axis;
+        }
+      }
+      cost = 0;
+      for (let i = 0; i < n; i++) {
+        const s = adot(dcos[i], centers[assign[i]]);
+        cost += 1 - s * s;
+      }
+      if (!changed && iter > 0) break;
+    }
+    return { centers, assign, cost };
+  }
+  function seedCenters(dcos, k, rng) {
+    const n = dcos.length;
+    const centers = [dcos[rng() * n | 0].slice()];
+    while (centers.length < k) {
+      const d2 = new Array(n);
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        let nearest = 0;
+        for (const c of centers) {
+          const s = adot(dcos[i], c);
+          if (s * s > nearest) nearest = s * s;
+        }
+        d2[i] = 1 - nearest;
+        total += d2[i];
+      }
+      let r = rng() * (total || 1), pick = n - 1;
+      for (let i = 0; i < n; i++) {
+        r -= d2[i];
+        if (r <= 0) {
+          pick = i;
+          break;
+        }
+      }
+      centers.push(dcos[pick].slice());
+    }
+    return centers;
+  }
+  function fitSets(dcos, k, options = {}) {
+    const n = dcos.length;
+    const restarts = options.restarts || 8;
+    const maxIter = options.maxIter || 50;
+    const rng = options.rng || Math.random;
+    if (n === 0 || k < 1) return { clusters: [], assignments: [], cost: 0 };
+    let best = null;
+    for (let r = 0; r < restarts; r++) {
+      const res = runOnce(dcos, seedCenters(dcos, Math.min(k, n), rng), maxIter);
+      if (!best || res.cost < best.cost) best = res;
+    }
+    const raw = best.centers.map(() => []);
+    best.assign.forEach((c, i) => raw[c].push(i));
+    let clusters = raw.map((members) => {
+      const vecs = members.map((i) => dcos[i]);
+      const { axis, concentration } = members.length ? leadingAxis(vecs) : { axis: [0, 0, -1], concentration: 1 / 3 };
+      return { axisDir: axis, axis: dcosToLine(axis), size: members.length, fraction: members.length / n, concentration, members };
+    }).filter((c) => c.size > 0);
+    clusters.sort((a, b) => b.size - a.size);
+    const remap = /* @__PURE__ */ new Map();
+    clusters.forEach((c, newIdx) => c.members.forEach((i) => remap.set(i, newIdx)));
+    const assignments = best.assign.map((_, i) => remap.get(i));
+    return { clusters, assignments, cost: best.cost };
   }
 
   // src/color.js
