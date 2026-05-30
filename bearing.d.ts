@@ -158,6 +158,29 @@ export namespace mat3 {
   function orthonormalize(m: Mat3): Mat3;
 }
 
+export type Quat = number[];
+export namespace quat {
+  function identity(): Quat;
+  function normalize(q: Quat): Quat;
+  function conjugate(q: Quat): Quat;
+  function multiply(a: Quat, b: Quat): Quat;
+  function fromAxisAngle(axis: Vec3, angle: number): Quat;
+  function toAxisAngle(q: Quat): { axis: number[]; angle: number };
+  function angle(q: Quat): number;
+  function toMatrix(q: Quat): Mat3;
+  function fromMatrix(m: Mat3): Quat;
+  function slerp(a: Quat, b: Quat, t: number): Quat;
+}
+
+export namespace rotation {
+  function frameFromPlaneLine(dd: number, dip: number, trend: number, plunge: number): Mat3;
+  function misorientation(R1: Mat3, R2: Mat3): { angle: number; axis: number[] };
+  function compose(...rotations: Mat3[]): Mat3;
+  function slerp(R0: Mat3, R1: Mat3, t: number): Mat3;
+  function eulerPole(R: Mat3): { axis: Attitude; angle: number };
+  function meanRotation(rotations: Mat3[]): { mean: Mat3; quaternion: Quat; concentration: number; spread: number };
+}
+
 export namespace curves {
   function greatCircle(pole: Dcos, nPoints?: number): Dcos[];
   function smallCircle(axis: Dcos, halfAngle: number, nPoints?: number): Dcos[];

@@ -2,6 +2,7 @@ export { Stereonet } from './stereonet.js';
 
 export * as vec3 from './core/vec3.js';
 export * as mat3 from './core/mat3.js';
+export * as quat from './core/quat.js';
 export * as conversions from './core/conversions.js';
 export * as curves from './core/curves.js';
 export * as io from './io.js';
@@ -17,6 +18,7 @@ export * as compass from './compass.js';
 export * as fault from './fault.js';
 export * as cluster from './cluster.js';
 export * as simulate from './simulate.js';
+export * as rotation from './rotation.js';
 export * as color from './color.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';

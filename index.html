@@ -1573,7 +1573,9 @@ var bearing = (() => {
     io: () => io_exports,
     mat3: () => mat3_exports,
     mergeStyles: () => deepMerge,
+    quat: () => quat_exports,
     rose: () => rose_exports,
+    rotation: () => rotation_exports,
     simulate: () => simulate_exports,
     statistics: () => statistics_exports,
     styleDefaults: () => defaults,
@@ -1757,12 +1759,12 @@ var bearing = (() => {
     const n = normalize(c);
     return dcosToLine(n);
   }
-  function rotateDcos(dcos, axis, angle2) {
-    const theta = angle2 * DEG;
+  function rotateDcos(dcos, axis, angle3) {
+    const theta = angle3 * DEG;
     return rotate(dcos, axis, theta);
   }
-  function rotateDcosArray(dcosArray, axis, angle2) {
-    const theta = angle2 * DEG;
+  function rotateDcosArray(dcosArray, axis, angle3) {
+    const theta = angle3 * DEG;
     return dcosArray.map((d) => rotate(d, axis, theta));
   }
 
@@ -1849,8 +1851,8 @@ var bearing = (() => {
     const points = [];
     for (let i = 0; i <= nPoints; i++) {
       const t = i / nPoints;
-      const angle2 = t * theta;
-      points.push(rotate(na, normalize(cross(na, nb)), angle2));
+      const angle3 = t * theta;
+      points.push(rotate(na, normalize(cross(na, nb)), angle3));
     }
     return points;
   }
@@ -1919,8 +1921,8 @@ var bearing = (() => {
     const cz = a[0] * b[1] - a[1] * b[0];
     const crossLen = Math.sqrt(cx * cx + cy * cy + cz * cz);
     const dot2 = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-    const angle2 = Math.atan2(crossLen, dot2);
-    if (angle2 < 1e-9) return identity();
+    const angle3 = Math.atan2(crossLen, dot2);
+    if (angle3 < 1e-9) return identity();
     let axis;
     if (crossLen < 1e-9) {
       const ref = Math.abs(a[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
@@ -1933,7 +1935,7 @@ var bearing = (() => {
       axis = [cx, cy, cz];
     }
     const len = Math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2]);
-    return rotationFromAxisAngle([axis[0] / len, axis[1] / len, axis[2] / len], angle2);
+    return rotationFromAxisAngle([axis[0] / len, axis[1] / len, axis[2] / len], angle3);
   }
   function transpose(m) {
     return [
@@ -4042,6 +4044,124 @@ var bearing = (() => {
     }
   }
 
+  // src/core/quat.js
+  var quat_exports = {};
+  __export(quat_exports, {
+    angle: () => angle2,
+    conjugate: () => conjugate,
+    fromAxisAngle: () => fromAxisAngle,
+    fromMatrix: () => fromMatrix,
+    identity: () => identity2,
+    multiply: () => multiply2,
+    normalize: () => normalize2,
+    slerp: () => slerp,
+    toAxisAngle: () => toAxisAngle,
+    toMatrix: () => toMatrix
+  });
+  function identity2() {
+    return [1, 0, 0, 0];
+  }
+  function normalize2(q) {
+    const l = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+    return [q[0] / l, q[1] / l, q[2] / l, q[3] / l];
+  }
+  function conjugate(q) {
+    return [q[0], -q[1], -q[2], -q[3]];
+  }
+  function multiply2(a, b) {
+    return [
+      a[0] * b[0] - a[1] * b[1] - a[2] * b[2] - a[3] * b[3],
+      a[0] * b[1] + a[1] * b[0] + a[2] * b[3] - a[3] * b[2],
+      a[0] * b[2] - a[1] * b[3] + a[2] * b[0] + a[3] * b[1],
+      a[0] * b[3] + a[1] * b[2] - a[2] * b[1] + a[3] * b[0]
+    ];
+  }
+  function fromAxisAngle(axis, angle3) {
+    const a = normalize(axis);
+    const h = angle3 / 2, s = Math.sin(h);
+    return [Math.cos(h), a[0] * s, a[1] * s, a[2] * s];
+  }
+  function toAxisAngle(q) {
+    let [w, x, y, z] = normalize2(q);
+    if (w < 0) {
+      w = -w;
+      x = -x;
+      y = -y;
+      z = -z;
+    }
+    const angle3 = 2 * Math.acos(Math.min(1, w));
+    const s = Math.sqrt(Math.max(0, 1 - w * w));
+    if (s < 1e-9) return { axis: [0, 0, 1], angle: 0 };
+    return { axis: [x / s, y / s, z / s], angle: angle3 };
+  }
+  function angle2(q) {
+    return 2 * Math.acos(Math.min(1, Math.abs(normalize2(q)[0])));
+  }
+  function toMatrix(q) {
+    const [w, x, y, z] = normalize2(q);
+    return [
+      1 - 2 * (y * y + z * z),
+      2 * (x * y - w * z),
+      2 * (x * z + w * y),
+      2 * (x * y + w * z),
+      1 - 2 * (x * x + z * z),
+      2 * (y * z - w * x),
+      2 * (x * z - w * y),
+      2 * (y * z + w * x),
+      1 - 2 * (x * x + y * y)
+    ];
+  }
+  function fromMatrix(m) {
+    const tr = m[0] + m[4] + m[8];
+    let w, x, y, z;
+    if (tr > 0) {
+      const S = Math.sqrt(tr + 1) * 2;
+      w = 0.25 * S;
+      x = (m[7] - m[5]) / S;
+      y = (m[2] - m[6]) / S;
+      z = (m[3] - m[1]) / S;
+    } else if (m[0] > m[4] && m[0] > m[8]) {
+      const S = Math.sqrt(1 + m[0] - m[4] - m[8]) * 2;
+      w = (m[7] - m[5]) / S;
+      x = 0.25 * S;
+      y = (m[1] + m[3]) / S;
+      z = (m[2] + m[6]) / S;
+    } else if (m[4] > m[8]) {
+      const S = Math.sqrt(1 + m[4] - m[0] - m[8]) * 2;
+      w = (m[2] - m[6]) / S;
+      x = (m[1] + m[3]) / S;
+      y = 0.25 * S;
+      z = (m[5] + m[7]) / S;
+    } else {
+      const S = Math.sqrt(1 + m[8] - m[0] - m[4]) * 2;
+      w = (m[3] - m[1]) / S;
+      x = (m[2] + m[6]) / S;
+      y = (m[5] + m[7]) / S;
+      z = 0.25 * S;
+    }
+    return normalize2([w, x, y, z]);
+  }
+  function slerp(a, b, t) {
+    let [aw, ax, ay, az] = normalize2(a);
+    let [bw, bx, by, bz] = normalize2(b);
+    let dot2 = aw * bw + ax * bx + ay * by + az * bz;
+    if (dot2 < 0) {
+      bw = -bw;
+      bx = -bx;
+      by = -by;
+      bz = -bz;
+      dot2 = -dot2;
+    }
+    if (dot2 > 0.9995) {
+      return normalize2([aw + t * (bw - aw), ax + t * (bx - ax), ay + t * (by - ay), az + t * (bz - az)]);
+    }
+    const theta0 = Math.acos(dot2), theta = theta0 * t;
+    const sinTheta0 = Math.sin(theta0);
+    const s1 = Math.sin(theta) / sinTheta0;
+    const s0 = Math.cos(theta) - dot2 * s1;
+    return [s0 * aw + s1 * bw, s0 * ax + s1 * bx, s0 * ay + s1 * by, s0 * az + s1 * bz];
+  }
+
   // src/io.js
   var io_exports = {};
   __export(io_exports, {
@@ -4058,16 +4178,16 @@ var bearing = (() => {
     const m = s.match(/^([NS])(\d+(?:\.\d+)?)([EW])?$/);
     if (!m) throw new Error(`Cannot parse direction: "${s}"`);
     const from = m[1];
-    const angle2 = parseFloat(m[2]);
+    const angle3 = parseFloat(m[2]);
     const to = m[3] || "";
     if (from === "N") {
-      if (to === "E" || to === "") return angle2;
-      if (to === "W") return (360 - angle2) % 360;
+      if (to === "E" || to === "") return angle3;
+      if (to === "W") return (360 - angle3) % 360;
     }
     if (from === "S") {
-      if (to === "E") return 180 - angle2;
-      if (to === "W") return 180 + angle2;
-      return 180 - angle2;
+      if (to === "E") return 180 - angle3;
+      if (to === "W") return 180 + angle3;
+      return 180 - angle3;
     }
     throw new Error(`Cannot parse direction: "${s}"`);
   }
@@ -4715,6 +4835,83 @@ var bearing = (() => {
       out.push(p);
     }
     return out;
+  }
+
+  // src/rotation.js
+  var rotation_exports = {};
+  __export(rotation_exports, {
+    compose: () => compose,
+    eulerPole: () => eulerPole,
+    frameFromPlaneLine: () => frameFromPlaneLine,
+    meanRotation: () => meanRotation,
+    misorientation: () => misorientation,
+    slerp: () => slerp2
+  });
+  var RAD2DEG2 = 180 / Math.PI;
+  function frameFromPlaneLine(dd, dip, trend, plunge) {
+    const z = normalize(planeToDcos(dd, dip));
+    const l = lineToDcos(trend, plunge);
+    let x = sub(l, scale(z, dot(l, z)));
+    if (length(x) < 1e-10) {
+      const ref = Math.abs(z[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+      x = cross(z, ref);
+    }
+    x = normalize(x);
+    const y = cross(z, x);
+    return [x[0], y[0], z[0], x[1], y[1], z[1], x[2], y[2], z[2]];
+  }
+  function misorientation(R1, R2) {
+    const dR = multiply(R2, transpose(R1));
+    const { axis, angle: angle3 } = toAxisAngle(fromMatrix(dR));
+    return { angle: angle3 * RAD2DEG2, axis };
+  }
+  function compose(...rotations) {
+    return rotations.reduce((acc, R) => multiply(R, acc), identity());
+  }
+  function slerp2(R0, R1, t) {
+    return toMatrix(slerp(fromMatrix(R0), fromMatrix(R1), t));
+  }
+  function eulerPole(R) {
+    const { axis, angle: angle3 } = toAxisAngle(fromMatrix(R));
+    return { axis: dcosToLine(axis), angle: angle3 * RAD2DEG2 };
+  }
+  function dominantEigen(M, n, iters = 300) {
+    let v = new Array(n).fill(0);
+    v[0] = 1;
+    for (let it = 0; it < iters; it++) {
+      const w = new Array(n).fill(0);
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) w[i] += M[i * n + j] * v[j];
+      const len = Math.hypot(...w) || 1;
+      let delta = 0;
+      for (let i = 0; i < n; i++) {
+        const nv = w[i] / len;
+        delta += Math.abs(nv - v[i]);
+        v[i] = nv;
+      }
+      if (delta < 1e-13) break;
+    }
+    let lambda = 0;
+    for (let i = 0; i < n; i++) {
+      let s = 0;
+      for (let j = 0; j < n; j++) s += M[i * n + j] * v[j];
+      lambda += v[i] * s;
+    }
+    return { vector: v, value: lambda };
+  }
+  function meanRotation(rotations) {
+    const n = rotations.length;
+    if (n === 0) return { mean: identity(), quaternion: identity2(), concentration: 0, spread: 0 };
+    const M = new Array(16).fill(0);
+    for (const R of rotations) {
+      const q = fromMatrix(R);
+      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) M[a * 4 + b] += q[a] * q[b] / n;
+    }
+    const { vector, value } = dominantEigen(M, 4);
+    const meanQ = normalize2(vector);
+    const mean = toMatrix(meanQ);
+    let spread = 0;
+    for (const R of rotations) spread += misorientation(mean, R).angle;
+    return { mean, quaternion: meanQ, concentration: value, spread: spread / n };
   }
 
   // src/color.js
