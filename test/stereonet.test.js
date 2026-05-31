@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Stereonet } from '../src/stereonet.js';
 import * as mat3 from '../src/core/mat3.js';
 import { lineToDcos } from '../src/core/conversions.js';
+import * as curves from '../src/core/curves.js';
 
 describe('Stereonet', () => {
   it('default options', () => {
@@ -44,6 +45,16 @@ describe('Stereonet', () => {
     assert.ok(svg.startsWith('<svg'));
     assert.ok(svg.includes('width="200"'));
     assert.ok(svg.endsWith('</svg>'));
+  });
+
+  it('curve() draws an arbitrary projected polyline', () => {
+    const sn = new Stereonet({ size: 200 });
+    const arc = curves.arc([0, 1, 0], [1, 0, 0]);            // N → E great-circle arc
+    const before = (sn.svg().match(/<polyline/g) || []).length;
+    sn.curve(arc, { stroke: '#f00', strokeWidth: 2, strokeDasharray: '4 3' });
+    const svg = sn.svg();
+    assert.ok((svg.match(/<polyline/g) || []).length > before, 'adds a polyline');
+    assert.ok(svg.includes('stroke="#f00"') && svg.includes('stroke-dasharray="4 3"'));
   });
 
   it('svg() includes grid lines', () => {
