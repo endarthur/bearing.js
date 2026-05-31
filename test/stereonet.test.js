@@ -4,6 +4,7 @@ import { Stereonet } from '../src/stereonet.js';
 import * as mat3 from '../src/core/mat3.js';
 import { lineToDcos } from '../src/core/conversions.js';
 import * as curves from '../src/core/curves.js';
+import * as vec3 from '../src/core/vec3.js';
 
 describe('Stereonet', () => {
   it('default options', () => {
@@ -45,6 +46,18 @@ describe('Stereonet', () => {
     assert.ok(svg.startsWith('<svg'));
     assert.ok(svg.includes('width="200"'));
     assert.ok(svg.endsWith('</svg>'));
+  });
+
+  it('upper hemisphere = lower projection of the z-reflected vector', () => {
+    const d = vec3.normalize([0.3, 0.5, -0.4]);
+    const upper = new Stereonet({ size: 300, hemisphere: 'upper' });
+    const lower = new Stereonet({ size: 300 });
+    const pu = upper.project(d);
+    const pl = lower.project([d[0], d[1], -d[2]]);
+    assert.ok(Math.abs(pu.x - pl.x) < 1e-9 && Math.abs(pu.y - pl.y) < 1e-9, 'upper(d) == lower(reflect z)');
+    // unproject inverts project (up to the ±axis ambiguity of the flip convention)
+    const back = upper.unproject(pu.x, pu.y);
+    assert.ok(Math.abs(Math.abs(vec3.dot(back, d)) - 1) < 1e-6, 'round-trips to the same axis');
   });
 
   it('curve() draws an arbitrary projected polyline', () => {
