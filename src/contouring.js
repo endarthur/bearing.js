@@ -45,6 +45,7 @@ const DEG = Math.PI / 180;
  *   cells outside the primitive circle are NaN.
  */
 export function densityGrid(dcos, options = {}) {
+  if (options.grid) return options.grid;   // passthrough: render a precomputed grid (e.g. fault dihedra)
   const {
     projection = 'equal-area',
     rotation = null,
