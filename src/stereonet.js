@@ -108,6 +108,7 @@ export class Stereonet {
     this.padding = options.padding ?? defaults.padding;
     this.projection = options.projection || 'equal-area';
     this.net = options.net || 'equatorial';
+    this.gridSpacing = options.gridSpacing || 10;   // net great/small-circle spacing in degrees
     this.rotation = options.rotation ?? (options.center
       ? Stereonet.rotationFromCenter(options.center[0], options.center[1])
       : options.northPole
@@ -662,7 +663,7 @@ export class Stereonet {
 
     // Grid
     const gridStyle = this._resolveCategory('grid');
-    const { greatCircles, smallCircles } = generateNet(10, this.net);
+    const { greatCircles, smallCircles } = generateNet(this.gridSpacing, this.net);
     for (const gc of greatCircles) {
       for (const seg of this._projectCurve(gc)) {
         if (seg.length > 1) {
@@ -1032,7 +1033,7 @@ export class Stereonet {
     setAttrs(this._primEl, { stroke: primStyle.stroke, 'stroke-width': primStyle.strokeWidth });
 
     // Grid — one setAttribute('d', ...) per path
-    const { greatCircles, smallCircles } = generateNet(10, this.net);
+    const { greatCircles, smallCircles } = generateNet(this.gridSpacing, this.net);
     this._gcPath.setAttribute('d', this._curvesToPathD(greatCircles));
     this._scPath.setAttribute('d', this._curvesToPathD(smallCircles));
 
