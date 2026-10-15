@@ -12,6 +12,11 @@
  *   - LINE: the phone's long axis (device +Y, toward the top edge) is the line
  *     direction — point the top of the phone down-plunge along the lineation.
  *
+ * The world vectors go straight to dcosToPlane / dcosToLine: bearing's direction cosines
+ * are the same east, north, up frame (lower hemisphere is z ≤ 0). Until 0.2.4 they were
+ * flipped to east, north, down first, which turned every answer 180° (a phone facing
+ * north with its top edge raised 30° read 000/30; the plane dips 180/30).
+ *
  * `alpha` is typically magnetic heading; pass options.declination (degrees, East
  * positive) to correct to true north, or feed a true-north alpha and leave it 0.
  */
@@ -38,11 +43,6 @@ export function deviceOrientationMatrix(alpha, beta, gamma) {
   ];
 }
 
-// ENU [E,N,Up] → bearing direction cosine [E, N, Down].
-function enuToBearing(v) {
-  return [v[0], v[1], -v[2]];
-}
-
 function applyDeclination(azimuth, declination) {
   return (((azimuth + (declination || 0)) % 360) + 360) % 360;
 }
@@ -57,7 +57,7 @@ function applyDeclination(azimuth, declination) {
 export function planeFromDeviceOrientation(alpha, beta, gamma, options = {}) {
   const R = deviceOrientationMatrix(alpha, beta, gamma);
   const normalENU = [R[2], R[5], R[8]];           // device +Z (screen normal)
-  const [dipDir, dip] = dcosToPlane(enuToBearing(normalENU));
+  const [dipDir, dip] = dcosToPlane(normalENU);
   return [applyDeclination(dipDir, options.declination), dip];
 }
 
@@ -71,6 +71,6 @@ export function planeFromDeviceOrientation(alpha, beta, gamma, options = {}) {
 export function lineFromDeviceOrientation(alpha, beta, gamma, options = {}) {
   const R = deviceOrientationMatrix(alpha, beta, gamma);
   const dirENU = [R[1], R[4], R[7]];              // device +Y (top edge)
-  const [trend, plunge] = dcosToLine(enuToBearing(dirENU));
+  const [trend, plunge] = dcosToLine(dirENU);
   return [applyDeclination(trend, options.declination), plunge];
 }

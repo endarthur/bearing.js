@@ -4581,22 +4581,19 @@ var bearing = (() => {
       cB * cG
     ];
   }
-  function enuToBearing(v) {
-    return [v[0], v[1], -v[2]];
-  }
   function applyDeclination(azimuth, declination) {
     return ((azimuth + (declination || 0)) % 360 + 360) % 360;
   }
   function planeFromDeviceOrientation(alpha, beta, gamma, options = {}) {
     const R = deviceOrientationMatrix(alpha, beta, gamma);
     const normalENU = [R[2], R[5], R[8]];
-    const [dipDir, dip] = dcosToPlane(enuToBearing(normalENU));
+    const [dipDir, dip] = dcosToPlane(normalENU);
     return [applyDeclination(dipDir, options.declination), dip];
   }
   function lineFromDeviceOrientation(alpha, beta, gamma, options = {}) {
     const R = deviceOrientationMatrix(alpha, beta, gamma);
     const dirENU = [R[1], R[4], R[7]];
-    const [trend, plunge] = dcosToLine(enuToBearing(dirENU));
+    const [trend, plunge] = dcosToLine(dirENU);
     return [applyDeclination(trend, options.declination), plunge];
   }
 
