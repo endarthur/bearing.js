@@ -10,6 +10,7 @@ import { project as equalAreaProject, inverse as equalAreaInverse } from './proj
 import { project as equalAngleProject, inverse as equalAngleInverse } from './projections/equal-angle.js';
 import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
+import { CanvasBuilder } from './render/canvas.js';
 import { defaults, resolveStyle } from './render/style.js';
 import { computeContours, densityGrid } from './contouring.js';
 import { confidenceEllipse as computeConfidenceEllipse } from './statistics.js';
@@ -654,6 +655,27 @@ export class Stereonet {
    */
   svg() {
     const svg = new SvgBuilder(this.size, this.size);
+    this._build(svg);
+    return svg.toString();
+  }
+
+  /**
+   * Draw the stereonet onto a Canvas 2D context — a canvas, an OffscreenCanvas, a recording
+   * context (a draw list), a PDF page. The same picture as svg(), as vectors.
+   * @param {CanvasRenderingContext2D} ctx
+   * @param {Object} [options] - { x = 0, y = 0, size = this.size }: where, and how big (px)
+   * @returns {this}
+   */
+  draw(ctx, { x = 0, y = 0, size = this.size } = {}) {
+    ctx.save();
+    ctx.translate(x, y);
+    if (size !== this.size) ctx.scale(size / this.size, size / this.size);
+    try { this._build(new CanvasBuilder(ctx)); } finally { ctx.restore(); }
+    return this;
+  }
+
+  /** The picture, through any builder with SvgBuilder's methods (SvgBuilder, CanvasBuilder). */
+  _build(svg) {
     const c = this._center;
     const r = this._radius;
 
@@ -719,8 +741,6 @@ export class Stereonet {
 
     // Cardinals
     this._renderCardinalsString(svg, c, r);
-
-    return svg.toString();
   }
 
   _renderCardinalsString(svg, cx, r) {

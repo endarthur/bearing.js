@@ -26,5 +26,6 @@ export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';
 
 export { SvgBuilder } from './render/svg.js';
+export { CanvasBuilder } from './render/canvas.js';
 export { generateNet, cardinalPoints } from './render/net.js';
 export { defaults as styleDefaults, deepMerge as mergeStyles } from './render/style.js';

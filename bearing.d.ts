@@ -108,6 +108,8 @@ export class Stereonet {
 
   // Output
   svg(): string;
+  /** Draw onto a Canvas 2D context (canvas, OffscreenCanvas, a recording context, a PDF page): svg()'s picture as vectors. */
+  draw(ctx: CanvasRenderingContext2D | any, options?: { x?: number; y?: number; size?: number }): this;
   svgDataURL(): string;
   download(filename?: string): void;
   toPNG(options?: PngOptions): Promise<string>;
@@ -389,6 +391,20 @@ export class SvgBuilder {
   group(id: string, children: string): this;
   toString(): string;
   toElement(): SVGElement;
+}
+
+/** SvgBuilder's methods, drawn onto a Canvas 2D context. path() takes M L H V Z only. */
+export class CanvasBuilder {
+  constructor(ctx: CanvasRenderingContext2D | any);
+  circle(cx: number, cy: number, r: number, style?: StyleOptions): this;
+  line(x1: number, y1: number, x2: number, y2: number, style?: StyleOptions): this;
+  polyline(points: number[][], style?: StyleOptions): this;
+  path(d: string, style?: StyleOptions): this;
+  rect(x: number, y: number, width: number, height: number, style?: StyleOptions): this;
+  text(x: number, y: number, content: string, style?: StyleOptions): this;
+  clipCircle(id: string, cx: number, cy: number, r: number): this;
+  openClipGroup(clipId: string): this;
+  closeGroup(): this;
 }
 
 export function generateNet(spacing?: number, type?: string): { greatCircles: Dcos[][]; smallCircles: Dcos[][] };
