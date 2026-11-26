@@ -352,6 +352,18 @@ export class Stereonet {
     return this.hemisphere === 'upper' ? [p[0], p[1], -p[2]] : p;
   }
 
+  /**
+   * The whole view as ONE matrix: the rotation, then the hemisphere's z-reflection — what a density grid
+   * needs, since it works in the lower-hemisphere projection of the transformed data. (Until 0.3.2 the grids
+   * got the rotation alone, so on an upper-hemisphere net the contours and the heatmap were drawn mirrored
+   * through the centre, away from the points they counted.) null when the view is the identity.
+   */
+  _viewMatrix() {
+    if (this.hemisphere !== 'upper') return this.rotation || null;
+    const Z = [1, 0, 0, 0, 1, 0, 0, 0, -1];
+    return this.rotation ? mat3.multiply(Z, this.rotation) : Z;
+  }
+
   /** Rotate a 3D point by the stereonet's rotation, then orient to the hemisphere. */
   _rotate(p) {
     return this._reflect(this.rotation ? mat3.transformVec3(this.rotation, p) : p);
@@ -515,7 +527,7 @@ export class Stereonet {
     }
     this._contourPaths = computeContours(this._contourDcos, {
       projection: this.projection,
-      rotation: this.rotation,
+      rotation: this._viewMatrix(),
       ...this._contourOptions,
     });
   }
@@ -565,7 +577,7 @@ export class Stereonet {
     }
     this._heatmapData = densityGrid(this._heatmapDcos, {
       projection: this.projection,
-      rotation: this.rotation,
+      rotation: this._viewMatrix(),
       gridSize: 48,
       ...this._heatmapOptions,
     });

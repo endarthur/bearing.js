@@ -48,6 +48,22 @@ describe('Stereonet', () => {
     assert.ok(svg.endsWith('</svg>'));
   });
 
+  it('an upper-hemisphere net contours a cluster where its points plot (not mirrored through the centre)', () => {
+    // a tight cluster about 060→30; its highest contour must ring the cluster's plotted point
+    const c = lineToDcos(60, 30), data = [];
+    for (let i = 0; i < 60; i++) { const a = i * 2.39996, r = 0.06 * Math.sqrt(i / 60); data.push(vec3.normalize([c[0] + r * Math.cos(a), c[1] + r * Math.sin(a), c[2] + r * Math.sin(a) * 0.5])); }
+    for (const hemisphere of ['lower', 'upper']) {
+      const sn = new Stereonet({ size: 300, hemisphere });
+      sn.contour(data, { levels: [8] });
+      sn.updateContours();
+      const pts = sn._contourPaths.flatMap((l) => l.paths.flat()).map(([px, py]) => sn._toSvg(px, py));
+      assert.ok(pts.length > 2, `${hemisphere}: a contour was drawn`);
+      const cx = pts.reduce((s, p) => s + p[0], 0) / pts.length, cy = pts.reduce((s, p) => s + p[1], 0) / pts.length;
+      const at = sn.project(c);
+      assert.ok(Math.hypot(cx - at.x, cy - at.y) < 15, `${hemisphere}: the contour sits on the cluster (contour centre ${cx.toFixed(0)},${cy.toFixed(0)} · cluster ${at.x.toFixed(0)},${at.y.toFixed(0)})`);
+    }
+  });
+
   it('upper hemisphere = lower projection of the z-reflected vector', () => {
     const d = vec3.normalize([0.3, 0.5, -0.4]);
     const upper = new Stereonet({ size: 300, hemisphere: 'upper' });
