@@ -46,3 +46,14 @@ describe('SVG output', () => {
     assert.strictEqual((svg.match(/<circle/g) || []).length, 1);
   });
 });
+
+describe('labels', () => {
+  it('sets that plot at the same spot get their labels stacked, not printed over each other', () => {
+    for (const fn of [vollmerSVG, woodcockSVG]) {
+      const svg = fn([{ dcos: cluster, label: 'J1' }, { dcos: cluster, label: 'J2' }, { dcos: cluster, label: 'lines' }]);
+      const ys = [...svg.matchAll(/<text[^>]*y="([\d.]+)"[^>]*>(J1|J2|lines)</g)].map((m) => +m[1]);
+      assert.equal(ys.length, 3, fn.name);
+      assert.equal(new Set(ys).size, 3, `${fn.name}: three distinct label rows (${ys.join(', ')})`);
+    }
+  });
+});

@@ -40,6 +40,16 @@ export function woodcockPoint(dcos) {
  * @param {Object} [options] @param {number} [options.size=320] @param {number} [options.max=7]
  * @returns {string} SVG
  */
+// A label beside its point, moved down past any label already placed that it would overprint (sets that
+// plot at the same spot — two clusters at P, say — used to print their names on top of each other).
+function placeLabel(placed, x, y, text) {
+  const w = String(text).length * 5.6 + 2, hgt = 11;
+  let ty = y;
+  for (let k = 0; k < 50 && placed.some((b) => x < b.x + b.w && b.x < x + w && ty - hgt < b.y && b.y - hgt < ty); k++) ty += hgt;
+  placed.push({ x, y: ty, w });
+  return ty;
+}
+
 export function woodcockSVG(datasets, options = {}) {
   const size = options.size || 320;
   const pad = options.padding ?? 44;
@@ -55,10 +65,11 @@ export function woodcockSVG(datasets, options = {}) {
   svg.text(pad + plot / 2, size - 10, 'ln(S2/S3)  — girdle →', { fill: '#555', 'font-size': 11, 'text-anchor': 'middle' });
   svg.text(14, pad + plot / 2, 'ln(S1/S2)  — cluster →', { fill: '#555', 'font-size': 11, 'text-anchor': 'middle', transform: `rotate(-90 14 ${pad + plot / 2})` });
 
+  const placed = [];
   for (const ds of asDatasets(datasets)) {
     const p = woodcockPoint(ds.dcos);
     svg.circle(sx(Math.min(max, p.x)), sy(Math.min(max, p.y)), 4, { fill: ds.color || '#e8920c', stroke: '#333', 'stroke-width': 0.7 });
-    if (ds.label) svg.text(sx(Math.min(max, p.x)) + 7, sy(Math.min(max, p.y)) + 3, ds.label, { fill: '#333', 'font-size': 10 });
+    if (ds.label) { const x = sx(Math.min(max, p.x)) + 7; svg.text(x, placeLabel(placed, x, sy(Math.min(max, p.y)) + 3, ds.label), ds.label, { fill: '#333', 'font-size': 10 }); }
   }
   return svg.toString();
 }
@@ -98,12 +109,13 @@ export function vollmerSVG(datasets, options = {}) {
   svg.text(G[0] - 4, G[1] + 14, 'G', { fill: '#555', 'font-size': 12, 'text-anchor': 'middle' });
   svg.text(R[0] + 4, R[1] + 14, 'R', { fill: '#555', 'font-size': 12, 'text-anchor': 'middle' });
 
+  const placed = [];
   for (const ds of asDatasets(datasets)) {
     const { P: p, G: g, R: r } = vollmerPoint(ds.dcos);
     const x = p * P[0] + g * G[0] + r * R[0];
     const y = p * P[1] + g * G[1] + r * R[1];
     svg.circle(x, y, 4, { fill: ds.color || '#1aa39a', stroke: '#333', 'stroke-width': 0.7 });
-    if (ds.label) svg.text(x + 7, y + 3, ds.label, { fill: '#333', 'font-size': 10 });
+    if (ds.label) svg.text(x + 7, placeLabel(placed, x + 7, y + 3, ds.label), ds.label, { fill: '#333', 'font-size': 10 });
   }
   return svg.toString();
 }
