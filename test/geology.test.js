@@ -148,6 +148,27 @@ describe('axial data: a pole and its antipode are the same thing', () => {
 });
 
 describe('the primitive circle', () => {
+  it('Tocher (1979): a grid node just past the rim reads the density at the diametrically opposite point', () => {
+    // poles straddling the primitive near E–W. The Fisher kernel is continuous and axial, so a node beyond the
+    // rim must read exactly the kernel sum at its own (upper-hemisphere) direction — which IS the value at the
+    // diametrically opposite point inside the net. (Copying the rim's value differs measurably.)
+    const poles = []; for (let i = 0; i < 30; i++) poles.push(planeToDcos(i % 2 ? 88 + (i % 4) : 268 - (i % 4), 85 + (i % 5)));
+    const n = 40, g = densityGrid(poles, { gridSize: n }), sigma = 90 / Math.sqrt(poles.length) * Math.PI / 180, kappa = 1 / (1 - Math.cos(sigma));
+    const mud = (d) => kappa / poles.length * poles.reduce((a, q) => a + Math.exp(kappa * (Math.abs(q[0] * d[0] + q[1] * d[1] + q[2] * d[2]) - 1)), 0);
+    let checked = 0, differs = 0;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const px = -g.projR + i * g.step, py = g.projR - j * g.step, r2 = px * px + py * py;
+      if (r2 <= g.projR * g.projR || r2 > g.projR * g.projR * 1.02) continue;
+      const s = Math.sqrt(1 - r2 / 4), d = [px * s, py * s, r2 / 2 - 1];      // its true direction (upper hemisphere)
+      assert.ok(d[2] > 0, 'beyond the rim is the upper hemisphere');
+      assert.ok(Math.abs(g.grid[j * n + i] - mud(d)) < 1e-9, `node ${i},${j}: ${g.grid[j * n + i]} vs ${mud(d)}`);
+      const k = Math.SQRT2 / Math.sqrt(r2), rim = [px * k * Math.sqrt(1 - r2 * k * k / 4), py * k * Math.sqrt(1 - r2 * k * k / 4), 0];
+      if (Math.abs(mud(rim) - mud(d)) > 1e-6) differs++;
+      checked++;
+    }
+    assert.ok(checked > 10 && differs > 0, `${checked} band nodes, ${differs} where the rim's value would differ`);
+  });
+
   it('inverse projections are defined ON the rim, both sides', () => {
     for (const [inv, R] of [[eaInverse, Math.SQRT2], [egInverse, 1]]) {
       for (const [x, y] of [[R, 0], [-R, 0], [0, R], [0, -R], [R * Math.SQRT1_2, R * Math.SQRT1_2]]) {

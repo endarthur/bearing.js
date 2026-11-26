@@ -162,7 +162,7 @@ const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 npm test
 ```
 
-508 tests using Node.js built-in test runner. `test/geology.test.js` checks results against known
+509 tests using Node.js built-in test runner. `test/geology.test.js` checks results against known
 structural geology (a normal fault's P is steep, a dextral E–W fault's P is NW–SE, Michael's σ1 is
 vertical for normal faults, density is unchanged when a pole flips to its antipode…), not only
 mathematical identities.

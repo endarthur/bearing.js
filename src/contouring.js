@@ -26,12 +26,21 @@ const DEG = Math.PI / 180;
  * @returns {Array<{ level: number, paths: number[][][] }>}
  *   paths in **projected** coordinates [px, py]
  */
-// a grid node in the band just outside the primitive (the 1.02 allowance) reads the value ON the rim,
-// so contours close at the circle (the net clips what lies past it) instead of stopping a cell short
+// A grid node in the band just outside the primitive (the 1.02 allowance) is evaluated at its TRUE
+// direction: both inverse formulas carry on past the rim into the upper hemisphere, and for axial data
+// (Kamb and Fisher kernels, the dihedra field) that equals the value at the diametrically opposite point
+// inside the net. So a contour reaching the circle continues from the opposite side, as Tocher (1979)
+// required of contoured fabric diagrams, instead of stopping at the rim. (The net clips what lies past it.)
 function rimInverse(inverseFn, px, py, projR) {
   const r2 = px * px + py * py, R2 = projR * projR;
-  if (r2 > R2) { const k = projR / Math.sqrt(r2); px *= k; py *= k; }
-  return inverseFn(px, py);
+  if (r2 <= R2) return inverseFn(px, py);
+  if (projR > 1) {                                   // equal-area (R = √2): z = r²/2 − 1, valid to r² = 4
+    if (r2 >= 4) return null;
+    const s = Math.sqrt(1 - r2 / 4);
+    return [px * s, py * s, r2 / 2 - 1];
+  }
+  const d = 1 + r2;                                  // equal-angle (R = 1): the stereographic inverse, any r
+  return [2 * px / d, 2 * py / d, (r2 - 1) / d];
 }
 
 /**
