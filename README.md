@@ -142,13 +142,30 @@ const grid = densityGrid(dcos, { projection: 'equal-area', gridSize: 48 });
 const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 ```
 
+## Conventions
+
+- Direction cosines: x = East, y = North, z = Up; lower hemisphere is z ≤ 0.
+- **Axial data.** Poles and lines without a sense are axes: a vector and its antipode are the same
+  measurement. Density (Fisher kernel and Kamb), the orientation tensor and eigen analysis treat them
+  so. Fisher statistics (`fisherStats`, `meanVector`, `confidenceCone`) sum vectors, so pass
+  `{ axial: true }` for poles and lines (each is first turned into the hemisphere of V1 —
+  `alignToAxis`); the default stays vector, for paleomagnetic directions and slip vectors.
+- **Faults** are (pole, slip) pairs where slip is the motion of the **hanging wall**, the block the
+  upward normal points into. Either pole may be passed. Sense codes (OpenStereo's set):
+  normal `N 2 −`, reverse `I R 1 +`, dextral `D 3`, sinistral `S L 4`, unknown `U F 0 5 ?` (and
+  anything unrecognised → `defined: false`); words too (`normal`, `reverse`, `thrust`,
+  `right-lateral`, `left-lateral`…). Dextral/sinistral are resolved against the right-hand-rule strike.
+
 ## Tests
 
 ```bash
 npm test
 ```
 
-470 tests using Node.js built-in test runner.
+508 tests using Node.js built-in test runner. `test/geology.test.js` checks results against known
+structural geology (a normal fault's P is steep, a dextral E–W fault's P is NW–SE, Michael's σ1 is
+vertical for normal faults, density is unchanged when a pole flips to its antipode…), not only
+mathematical identities.
 
 ## License
 

@@ -26,6 +26,14 @@ const DEG = Math.PI / 180;
  * @returns {Array<{ level: number, paths: number[][][] }>}
  *   paths in **projected** coordinates [px, py]
  */
+// a grid node in the band just outside the primitive (the 1.02 allowance) reads the value ON the rim,
+// so contours close at the circle (the net clips what lies past it) instead of stopping a cell short
+function rimInverse(inverseFn, px, py, projR) {
+  const r2 = px * px + py * py, R2 = projR * projR;
+  if (r2 > R2) { const k = projR / Math.sqrt(r2); px *= k; py *= k; }
+  return inverseFn(px, py);
+}
+
 /**
  * Compute the MUD-normalised density grid (Fisher kernel) in projected space.
  * Shared by computeContours and exposed for raster/heatmap rendering.
@@ -77,7 +85,7 @@ export function densityGrid(dcos, options = {}) {
       for (let i = 0; i < gridSize; i++) {
         const px = -projR + i * step;
         if (px * px + py * py > projR * projR * 1.02) { grid[j * gridSize + i] = NaN; continue; }
-        const d = inverseFn(px, py);
+        const d = rimInverse(inverseFn, px, py, projR);
         if (!d) { grid[j * gridSize + i] = NaN; continue; }
 
         let count = 0;
@@ -107,13 +115,15 @@ export function densityGrid(dcos, options = {}) {
         continue;
       }
 
-      const d = inverseFn(px, py);
+      const d = rimInverse(inverseFn, px, py, projR);
       if (!d) { grid[j * gridSize + i] = NaN; continue; }
 
       let density = 0;
       for (let m = 0; m < n; m++) {
         const rd = data[m];
-        const dot = d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2];
+        // axial, like Kamb: a measurement and its antipode are the same (data pre-rotated into the view
+        // can sit in the upper hemisphere; a subvertical set straddles the primitive)
+        const dot = Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]);
         density += Math.exp(kappa * (dot - 1));
       }
 

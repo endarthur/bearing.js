@@ -4,6 +4,15 @@
  * All functions take arrays of direction cosines [x, y, z] (unit vectors,
  * lower hemisphere).  Use conversions.planeToDcos / lineToDcos to convert
  * from degree-based representations first.
+ *
+ * AXIAL vs VECTOR data. Poles to planes and lines without a sense are AXES: a
+ * pole and its antipode are the same measurement. Fisher statistics sum vectors,
+ * so on axes they need `{ axial: true }`: each vector is first turned into the
+ * hemisphere of the principal axis V1 (`alignToAxis`), which keeps a cluster that
+ * straddles the primitive circle in one piece. Without it, poles to ~090/88 and
+ * ~270/88 planes (one family) average to nonsense. The default stays VECTOR
+ * (paleomagnetic directions, slip vectors), the Fisher distribution's own domain.
+ * The orientation tensor, principal axes and the bootstraps are axial already.
  */
 
 import * as vec3 from './core/vec3.js';
@@ -29,12 +38,30 @@ export function resultant(dcos) {
 }
 
 /**
+ * Turn every vector into the hemisphere of the principal axis V1 of the set, so
+ * that axial data can be summed (a pole and its antipode count as the same).
+ * @param {Array<number[]>} dcos
+ * @returns {Array<number[]>} the same vectors, some negated
+ */
+export function alignToAxis(dcos) {
+  if (!dcos.length) return [];
+  const v1 = symmetricEigen3(orientationTensor(dcos)).vectors[0];
+  return dcos.map(d => (d[0] * v1[0] + d[1] * v1[1] + d[2] * v1[2] < 0 ? [-d[0], -d[1], -d[2]] : d));
+}
+
+// the data a vector statistic sums: aligned to V1 when axial
+const prep = (dcos, axial) => (axial ? alignToAxis(dcos) : dcos);
+// an axial mean is reported as the lower-hemisphere end of its axis
+const lowerIf = (v, axial) => (axial && v[2] > 0 ? [-v[0], -v[1], -v[2]] : v);
+
+/**
  * Mean direction — normalised resultant.
  * @param {Array<number[]>} dcos
- * @returns {number[]} unit vector [x, y, z]
+ * @param {{ axial?: boolean }} [options] - axial data (poles, lines without sense)
+ * @returns {number[]} unit vector [x, y, z] (lower hemisphere when axial)
  */
-export function meanVector(dcos) {
-  return vec3.normalize(resultant(dcos));
+export function meanVector(dcos, { axial = false } = {}) {
+  return lowerIf(vec3.normalize(resultant(prep(dcos, axial))), axial);
 }
 
 // ---------------------------------------------------------------------------
@@ -45,6 +72,8 @@ export function meanVector(dcos) {
  * Fisher statistics for a set of direction cosines.
  *
  * @param {Array<number[]>} dcos - array of unit vectors (lower hemisphere)
+ * @param {{ axial?: boolean }} [options] - axial data (poles, lines without
+ *   sense): aligned to V1 before summing (see the module header)
  * @returns {{ n: number, R: number, Rbar: number, mean: number[],
  *             kappa: number, alpha95: number }}
  *   n       — sample size
@@ -54,12 +83,12 @@ export function meanVector(dcos) {
  *   kappa   — Fisher concentration parameter (ML estimate)
  *   alpha95 — 95 % confidence cone half-angle in degrees
  */
-export function fisherStats(dcos) {
+export function fisherStats(dcos, { axial = false } = {}) {
   const n = dcos.length;
-  const res = resultant(dcos);
+  const res = resultant(prep(dcos, axial));
   const R = vec3.length(res);
   const Rbar = R / n;
-  const mean = R > 1e-10 ? vec3.scale(res, 1 / R) : [0, 0, -1];
+  const mean = R > 1e-10 ? lowerIf(vec3.scale(res, 1 / R), axial) : [0, 0, -1];
 
   // Concentration parameter (ML estimate, bias-corrected for small n)
   let kappa = Infinity;
@@ -84,14 +113,15 @@ export function fisherStats(dcos) {
  *
  * @param {Array<number[]>} dcos
  * @param {number} [confidence=0.95] - e.g. 0.95, 0.99
+ * @param {{ axial?: boolean }} [options] - axial data (see fisherStats)
  * @returns {{ mean: [number, number], halfAngle: number, confidence: number }}
  *   mean as [trend, plunge] in degrees; halfAngle in degrees (0 if undefined).
  */
-export function confidenceCone(dcos, confidence = 0.95) {
+export function confidenceCone(dcos, confidence = 0.95, { axial = false } = {}) {
   const n = dcos.length;
-  const res = resultant(dcos);
+  const res = resultant(prep(dcos, axial));
   const R = vec3.length(res);
-  const meanVec = R > 1e-10 ? vec3.scale(res, 1 / R) : [0, 0, -1];
+  const meanVec = R > 1e-10 ? lowerIf(vec3.scale(res, 1 / R), axial) : [0, 0, -1];
 
   let halfAngle = 0;
   if (n >= 2 && R > 1e-10 && n - R > 1e-10) {

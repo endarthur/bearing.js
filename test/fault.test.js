@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  dipVector, resolveSense, ptAxes, michael, principalStresses, dihedraGrid,
+  dipVector, resolveSense, ptAxes, michael, principalStresses, dihedraGrid, upwardNormal,
 } from '../src/fault.js';
 import { planeToDcos } from '../src/core/conversions.js';
 import * as vec3 from '../src/core/vec3.js';
@@ -63,7 +63,10 @@ describe('michael paleostress inversion', () => {
     [1, 1, 1], [1, -1, 1], [1, 1, -1], [2, 1, 1],
     [1, 2, 1], [1, 1, 2], [2, -1, 1], [1, 2, -1],
   ].map(vec3.normalize);
-  const slips = planes.map(n => shearSlip(sigma, n));
+  // a (pole, slip) pair means HANGING-WALL slip whichever pole is passed, so the synthetic slip is the
+  // shear direction on the UPWARD pole (the assertions here are sign-agnostic; the geology of the sign
+  // is pinned in test/geology.test.js)
+  const slips = planes.map(n => shearSlip(sigma, upwardNormal(n)));
 
   it('recovers the stress tensor up to scale/sign', () => {
     // Michael's unit-traction assumption makes recovery of physical shear-

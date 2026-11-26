@@ -21,8 +21,9 @@ export function project(dcos) {
  * Returns [x, y, z] on the unit sphere with z <= 0.
  */
 export function inverse(px, py) {
-  const r2 = px * px + py * py;
-  if (r2 > 2) return null; // outside the projection circle
+  let r2 = px * px + py * py;
+  if (r2 > 2 * (1 + 1e-9)) return null; // outside the projection circle
+  if (r2 > 2) { const k = Math.sqrt(2 / r2); px *= k; py *= k; r2 = 2; } // ON the rim (a hair out: float), not outside
   const z = -(1 - r2 / 2);
   const scale = Math.sqrt(1 - r2 / 4);
   return [px * scale, py * scale, z];

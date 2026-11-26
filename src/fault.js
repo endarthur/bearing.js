@@ -6,15 +6,55 @@
  * field (for P-T dihedra plots), and the Michael (1984) linear paleostress
  * inversion. Inversion/dihedra ported from the author's `auttitude` library.
  *
- * Paleostress sign/ordering follows Michael (1984)/auttitude:
- * principalStresses returns axes ordered [σ1 (compressive), σ2, σ3 (tensile)].
- * Verify the sign convention against a known dataset before quantitative use.
+ * THE CONVENTION (every function here): x = East, y = North, z = Up. A fault is
+ * (pole, slip) where `slip` is the motion of the HANGING WALL — the block above
+ * the plane, i.e. the block the UPWARD normal points into. The sign of the pole
+ * you pass does not matter: each function turns it upward itself (`upwardNormal`).
+ * A vertical plane has no block "above"; there the hanging wall is the block on
+ * the side of the canonical upward normal (+x/+y side by `upwardNormal`'s
+ * tie-break), and `resolveSense` resolves senses against the same normal, so the
+ * pair it returns is consistent with ptAxes / michael / dihedraGrid.
+ *
+ * principalStresses returns axes ordered [σ1 (most compressive), σ2, σ3 (most
+ * tensile)]. Checked against known geology in test/geology.test.js: normal
+ * faults give P / σ1 steep and T / σ3 horizontal, thrusts the reverse, a dextral
+ * E–W fault P NE–SW.
  */
 
 import * as vec3 from './core/vec3.js';
 import { symmetricEigen3 } from './core/eigen.js';
 import { inverse as equalAreaInverse } from './projections/equal-area.js';
 import { inverse as equalAngleInverse } from './projections/equal-angle.js';
+
+const EPS = 1e-9;
+
+/**
+ * The plane's normal pointing UP, into the hanging wall. For a vertical plane
+ * (no up) the tie-break is the +x side, then +y — so a plane's two poles always
+ * give the same answer.
+ * @param {number[]} normal - either pole of the plane
+ * @returns {number[]} unit upward normal
+ */
+export function upwardNormal(normal) {
+  const n = vec3.normalize(normal);
+  if (n[2] > EPS) return n;
+  if (n[2] < -EPS) return vec3.negate(n);
+  if (n[0] > EPS || (Math.abs(n[0]) <= EPS && n[1] > 0)) return [n[0], n[1], 0];
+  return [-n[0], -n[1], 0];
+}
+
+/**
+ * Right-hand-rule strike direction of a plane (horizontal; the plane dips to its
+ * right). For a vertical plane, the strike that has the upwardNormal side on its
+ * right.
+ * @param {number[]} normal - either pole of the plane
+ * @returns {number[]} unit horizontal vector ([0,1,0] for a horizontal plane)
+ */
+export function strikeVector(normal) {
+  const u = upwardNormal(normal);
+  const h = Math.hypot(u[0], u[1]);
+  return h < EPS ? [0, 1, 0] : [-u[1] / h, u[0] / h, 0];
+}
 
 /**
  * Down-dip direction (dip vector) of a plane from its pole (downward normal).
@@ -31,40 +71,62 @@ export function dipVector(normal) {
   return len < 1e-10 ? [1, 0, 0] : vec3.scale(proj, 1 / len);
 }
 
+// sense codes → kind. The single-character set is OpenStereo's (0.1 / 3.0); whole words first, so
+// "right-lateral" is dextral and not R(everse).
+const SENSE_WORDS = [
+  [/^(normal)\b/, 'normal'], [/^(reverse|inverse|thrust)\b/, 'reverse'],
+  [/^(dextral|right[- ]?lateral)\b/, 'dextral'], [/^(sinistral|left[- ]?lateral)\b/, 'sinistral'],
+  [/^(unknown|undefined)\b/, null],
+];
+const SENSE_CHARS = {
+  n: 'normal', 2: 'normal', '-': 'normal',
+  i: 'reverse', r: 'reverse', 1: 'reverse', '+': 'reverse',
+  d: 'dextral', 3: 'dextral',
+  s: 'sinistral', l: 'sinistral', 4: 'sinistral',
+};
+function senseKind(sense) {
+  const str = sense == null ? '' : String(sense).trim().toLowerCase();
+  for (const [re, kind] of SENSE_WORDS) if (re.test(str)) return kind;
+  return str.length === 1 ? (SENSE_CHARS[str] || null) : null;   // u f 0 5 ? '' and anything else → unknown
+}
+
 /**
- * Resolve a slickenline into an oriented slip vector from a sense indicator,
- * following OpenStereo's convention. Sense (first char, case-insensitive):
- *   u/f/?/0/5 → undefined (returns line as-is, defined=false)
- *   n/-/2 → normal (line as-is);  i/+/1 → inverse/reverse (−line)
- *   d/3 → dextral;  s/4 → sinistral (oriented via the dip vector)
- * @param {number[]} normal - fault-plane pole
- * @param {number[]} line - slickenline direction
+ * Resolve a slickenline into the HANGING-WALL slip vector from a sense code.
+ * Codes (case-insensitive; OpenStereo's set):
+ *   normal    N 2 −  ("normal")                  hanging wall down
+ *   reverse   I R 1 +  ("reverse", "inverse", "thrust")   hanging wall up
+ *   dextral   D 3  ("dextral", "right-lateral")  hanging-wall slip · strike < 0
+ *   sinistral S L 4  ("sinistral", "left-lateral") hanging-wall slip · strike > 0
+ *   unknown   U F 0 5 ? '' — and any code not above → { slip: line, defined: false }
+ * Strike is the right-hand-rule strike (`strikeVector`); dextral / sinistral are
+ * resolved against it, not against the dip vector (which is ⟂ to the slip on a
+ * strike-slip fault, so its sign would flip with a degree of plunge).
+ * @param {number[]} normal - fault-plane pole (either sign)
+ * @param {number[]} line - slickenline direction (either sign)
  * @param {string|number} sense
  * @returns {{ slip: number[], defined: boolean }}
  */
 export function resolveSense(normal, line, sense) {
-  let n = vec3.normalize(normal);
-  if (n[2] > 0) n = vec3.negate(n);
-  const s = String(sense).toLowerCase()[0];
-  if (s === 'u' || s === 'f' || s === '0' || s === '5' || s === '?') return { slip: line, defined: false };
-  if (s === 'n' || s === '2' || s === '-') return { slip: line, defined: true };
-  if (s === 'i' || s === '1' || s === '+') return { slip: vec3.negate(line), defined: true };
-
-  const lineSense = vec3.dot(dipVector(n), line);
-  if (s === 'd' || s === '3') return { slip: lineSense > 0 ? line : vec3.negate(line), defined: true };
-  if (s === 's' || s === '4') return { slip: lineSense < 0 ? line : vec3.negate(line), defined: true };
-  return { slip: line, defined: true };
+  const kind = senseKind(sense);
+  if (!kind) return { slip: line, defined: false };
+  const l = vec3.normalize(line);
+  if (kind === 'normal') return { slip: l[2] <= 0 ? l : vec3.negate(l), defined: true };
+  if (kind === 'reverse') return { slip: l[2] >= 0 ? l : vec3.negate(l), defined: true };
+  const along = vec3.dot(strikeVector(normal), l);
+  if (kind === 'dextral') return { slip: along < 0 ? l : vec3.negate(l), defined: true };   // a tie (no strike component) resolves opposite to sinistral
+  return { slip: along >= 0 ? l : vec3.negate(l), defined: true };   // sinistral
 }
 
 /**
  * Kinematic P (shortening) and T (extension) axes for a single fault, at 45° to
- * the fault plane in the movement plane. With unit normal n and unit slip s
- * (hanging-wall movement), P = (n − s)/√2 and T = (n + s)/√2.
+ * the fault plane in the movement plane (Marrett & Allmendinger 1990). With n the
+ * UPWARD unit normal (into the hanging wall) and s the unit hanging-wall slip,
+ * P = (n − s)/√2 and T = (n + s)/√2. Either pole may be passed.
  * @param {number[]} normal @param {number[]} slip
  * @returns {{ p: number[], t: number[] }} unit vectors
  */
 export function ptAxes(normal, slip) {
-  const n = vec3.normalize(normal);
+  const n = upwardNormal(normal);
   const s = vec3.normalize(slip);
   return { p: vec3.normalize(vec3.sub(n, s)), t: vec3.normalize(vec3.add(n, s)) };
 }
@@ -90,8 +152,8 @@ function solveLinear(M, b) {
 
 /**
  * Linear paleostress inversion (Michael 1984) from fault data.
- * @param {Array<number[]>} planes - fault-plane normals (direction cosines)
- * @param {Array<number[]>} slips - slip vectors, one per plane
+ * @param {Array<number[]>} planes - fault-plane poles (either sign)
+ * @param {Array<number[]>} slips - hanging-wall slip vectors, one per plane
  * @returns {{ stress: number[], residual: number }}
  *   stress = flat row-major 3×3 deviatoric stress tensor; residual = ‖A·x − b‖².
  */
@@ -102,7 +164,7 @@ export function michael(planes, slips) {
   let btb = 0;
 
   for (let i = 0; i < planes.length; i++) {
-    const [n1, n2, n3] = planes[i];
+    const [n1, n2, n3] = vec3.negate(upwardNormal(planes[i]));   // the downward pole, whichever was passed
     const s = slips[i];
     const rows = [
       [n1 - n1 ** 3 + n1 * n3 ** 2, n2 - 2 * n2 * n1 ** 2, n3 - 2 * n3 * n1 ** 2, -n1 * n2 ** 2 + n1 * n3 ** 2, -2 * n1 * n2 * n3],
@@ -141,6 +203,14 @@ export function principalStresses(stress) {
   return { axes: [vectors[2], vectors[1], vectors[0]], values: [values[2], values[1], values[0]] };
 }
 
+// a grid node in the band just outside the primitive (the 1.02 allowance) reads the value ON the rim,
+// so contours close at the circle (the net clips what lies past it) instead of stopping a cell short
+function rimInverse(inverseFn, px, py, projR) {
+  const r2 = px * px + py * py, R2 = projR * projR;
+  if (r2 > R2) { const k = projR / Math.sqrt(r2); px *= k; py *= k; }
+  return inverseFn(px, py);
+}
+
 /**
  * Angelier right-dihedra field on a projected grid, for P-T dihedra plots. Each
  * cell is the mean of 2·(node·normal)·(node·slip) over the faults: positive in
@@ -161,17 +231,18 @@ export function dihedraGrid(planes, slips, options = {}) {
   const grid = new Float64Array(gridSize * gridSize);
   const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
   const m = planes.length || 1;
+  const downPoles = planes.map((p) => vec3.negate(upwardNormal(p)));   // the field's sign is for downward poles
 
   for (let j = 0; j < gridSize; j++) {
     const py = projR - j * step;
     for (let i = 0; i < gridSize; i++) {
       const px = -projR + i * step;
       if (px * px + py * py > projR * projR * 1.02) { grid[j * gridSize + i] = NaN; continue; }
-      const d = inverseFn(px, py);
+      const d = rimInverse(inverseFn, px, py, projR);
       if (!d) { grid[j * gridSize + i] = NaN; continue; }
       let sum = 0;
       for (let k = 0; k < planes.length; k++) {
-        const n = planes[k], s = slips[k];
+        const n = downPoles[k], s = slips[k];
         sum += 2 * (d[0] * n[0] + d[1] * n[1] + d[2] * n[2]) * (d[0] * s[0] + d[1] * s[1] + d[2] * s[2]);
       }
       grid[j * gridSize + i] = sum / m;

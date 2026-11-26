@@ -255,9 +255,12 @@ export interface CommonMeanTest { F: number; df1: number; df2: number; p: number
 
 export namespace statistics {
   function resultant(dcos: Dcos[]): Vec3;
-  function meanVector(dcos: Dcos[]): Dcos;
-  function fisherStats(dcos: Dcos[]): FisherStats;
-  function confidenceCone(dcos: Dcos[], confidence?: number): ConfidenceConeResult;
+  /** `axial`: poles / lines without sense — each vector is turned to the hemisphere of V1 before summing. */
+  interface AxialOptions { axial?: boolean }
+  function alignToAxis(dcos: Dcos[]): Dcos[];
+  function meanVector(dcos: Dcos[], options?: AxialOptions): Dcos;
+  function fisherStats(dcos: Dcos[], options?: AxialOptions): FisherStats;
+  function confidenceCone(dcos: Dcos[], confidence?: number, options?: AxialOptions): ConfidenceConeResult;
   function orientationTensor(dcos: Dcos[]): Mat3;
   function principalAxes(dcos: Dcos[]): PrincipalAxes;
   function confidenceEllipse(dcos: Dcos[], options?: ConfidenceEllipseOptions): ConfidenceEllipseResult;
@@ -310,6 +313,10 @@ export namespace analysis {
 }
 
 export namespace fault {
+  /** The plane's normal pointing up, into the hanging wall (vertical plane: the +x, then +y side). */
+  function upwardNormal(normal: Dcos): Dcos;
+  /** Right-hand-rule strike direction (horizontal). */
+  function strikeVector(normal: Dcos): Dcos;
   function dipVector(normal: Dcos): Dcos;
   function resolveSense(normal: Dcos, line: Dcos, sense: string | number): { slip: Dcos; defined: boolean };
   function ptAxes(normal: Dcos, slip: Dcos): { p: Dcos; t: Dcos };
