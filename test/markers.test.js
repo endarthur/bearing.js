@@ -29,6 +29,11 @@ describe('point markers (style.symbol)', () => {
     const svg = net.svg();
     assert.match(svg, /<path[^>]*fill="none"[^>]*stroke="#0a0"/);
   });
+  it('a great circle keeps its dash in the SVG (it was dropped)', () => {
+    const net = new Stereonet({ size: 200 });
+    net.plane(45, 60, { stroke: '#123', strokeWidth: 1.2, strokeDasharray: '6,4' });
+    assert.match(net.svg(), /<polyline[^>]*stroke-dasharray="6,4"/);
+  });
   it('on a canvas the same marker is a path, filled', () => {
     const calls = [];
     const ctx = new Proxy({ setLineDash() {} }, { get: (t, k) => (k in t ? t[k] : (...a) => { calls.push(k); return { width: 1 }; }), set: (t, k, v) => { t[k] = v; return true; } });

@@ -902,6 +902,8 @@ export class Stereonet {
             svg.polyline(seg, {
               stroke: s.stroke,
               'stroke-width': s.strokeWidth,
+              ...(s.strokeDasharray && s.strokeDasharray !== 'none' ? { 'stroke-dasharray': s.strokeDasharray } : {}),
+              ...(s.opacity != null && s.opacity < 1 ? { opacity: s.opacity } : {}),
               fill: 'none',
               class: this._classFor('plane', item.style.class),
             });
@@ -1196,6 +1198,8 @@ export class Stereonet {
           d,
           stroke: s.stroke,
           'stroke-width': s.strokeWidth,
+          'stroke-dasharray': s.strokeDasharray || 'none',   // a dashed great circle (it was dropped on the live net)
+          ...(s.opacity != null && s.opacity < 1 ? { opacity: s.opacity } : {}),
           fill: 'none',
         });
         break;
