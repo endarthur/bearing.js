@@ -1,4 +1,4 @@
-export { Stereonet } from './stereonet.js';
+export { Stereonet, MARKERS, markerPath } from './stereonet.js';
 
 export * as vec3 from './core/vec3.js';
 export * as mat3 from './core/mat3.js';

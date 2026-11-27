@@ -14,7 +14,12 @@ export type Mat3 = number[];
 export type Attitude = [number, number];
 export type Projection = 'equal-area' | 'equal-angle';
 
-export interface StyleOptions { [key: string]: any; }
+/** a pole's or a line's marker: circle (default), square, triangle, diamond, cross (+), x — the last two are strokes */
+export type Marker = 'circle' | 'square' | 'triangle' | 'diamond' | 'cross' | 'x';
+export interface StyleOptions { symbol?: Marker; opacity?: number; strokeWidth?: number; [key: string]: any; }
+export const MARKERS: Marker[];
+/** a marker's SVG path centred at (x, y), radius r — null for a circle */
+export function markerPath(symbol: Marker, x: number, y: number, r: number): string | null;
 
 export interface StereonetOptions {
   size?: number;

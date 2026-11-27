@@ -12,6 +12,35 @@ import { generateNet } from './render/net.js';
 import { SvgBuilder } from './render/svg.js';
 import { CanvasBuilder } from './render/canvas.js';
 import { defaults, resolveStyle } from './render/style.js';
+
+// ── point markers: a pole's or a line's symbol (style.symbol) ──────────────────────────────────────────
+// 'circle' (the default) | 'square' | 'triangle' | 'diamond' | 'cross' (+) | 'x'. The filled shapes take
+// style.fill; 'cross' and 'x' are strokes, in the fill colour. style.opacity fades the whole marker;
+// style.strokeWidth is the outline's (or a stroke marker's) width.
+export const MARKERS = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x'];
+const STROKE_MARKERS = new Set(['cross', 'x']);
+const f2 = (v) => +(+v).toFixed(2);
+export function markerPath(symbol, x, y, r) {
+  switch (symbol) {
+    case 'square': { const h = r * 0.88; return `M${f2(x - h)} ${f2(y - h)}H${f2(x + h)}V${f2(y + h)}H${f2(x - h)}Z`; }
+    case 'triangle': return `M${f2(x)} ${f2(y - 1.25 * r)}L${f2(x + 1.08 * r)} ${f2(y + 0.62 * r)}L${f2(x - 1.08 * r)} ${f2(y + 0.62 * r)}Z`;
+    case 'diamond': return `M${f2(x)} ${f2(y - 1.25 * r)}L${f2(x + r)} ${f2(y)}L${f2(x)} ${f2(y + 1.25 * r)}L${f2(x - r)} ${f2(y)}Z`;
+    case 'cross': return `M${f2(x - 1.1 * r)} ${f2(y)}H${f2(x + 1.1 * r)}M${f2(x)} ${f2(y - 1.1 * r)}V${f2(y + 1.1 * r)}`;
+    case 'x': { const h = r * 0.85; return `M${f2(x - h)} ${f2(y - h)}L${f2(x + h)} ${f2(y + h)}M${f2(x + h)} ${f2(y - h)}L${f2(x - h)} ${f2(y + h)}`; }
+    default: return null;                                  // a circle
+  }
+}
+/** a marker's SVG attributes (and its path, or null for a circle) from a resolved style */
+function markerAttrs(s, sx, sy) {
+  const sym = s.symbol && s.symbol !== 'circle' ? s.symbol : null, stroky = sym && STROKE_MARKERS.has(sym);
+  const a = {
+    fill: stroky ? 'none' : s.fill,
+    stroke: stroky ? (s.fill && s.fill !== 'none' ? s.fill : s.stroke) : s.stroke,
+    ...(stroky ? { 'stroke-width': Math.max(1, (s.r || 3) * 0.45), 'stroke-linecap': 'round' } : s.strokeWidth != null ? { 'stroke-width': s.strokeWidth } : {}),
+    ...(s.opacity != null && s.opacity < 1 ? { opacity: s.opacity } : {}),
+  };
+  return { d: sym ? markerPath(sym, sx, sy, s.r) : null, attrs: a };
+}
 import { computeContours, densityGrid } from './contouring.js';
 import { confidenceEllipse as computeConfidenceEllipse } from './statistics.js';
 
@@ -849,12 +878,9 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        const s = this._resolveCategory('pole', item.style);
-        svg.circle(sx, sy, s.r, {
-          fill: s.fill,
-          stroke: s.stroke,
-          class: this._classFor('pole', item.style.class),
-        });
+        const s = this._resolveCategory('pole', item.style), m = markerAttrs(s, sx, sy);
+        const cls = { class: this._classFor('pole', item.style.class) };
+        if (m.d) svg.path(m.d, { ...m.attrs, ...cls }); else svg.circle(sx, sy, s.r, { ...m.attrs, ...cls });
         break;
       }
       case 'line': {
@@ -862,12 +888,9 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        const s = this._resolveCategory('line', item.style);
-        svg.circle(sx, sy, s.r, {
-          fill: s.fill,
-          stroke: s.stroke,
-          class: this._classFor('line', item.style.class),
-        });
+        const s = this._resolveCategory('line', item.style), m = markerAttrs(s, sx, sy);
+        const cls = { class: this._classFor('line', item.style.class) };
+        if (m.d) svg.path(m.d, { ...m.attrs, ...cls }); else svg.circle(sx, sy, s.r, { ...m.attrs, ...cls });
         break;
       }
       case 'plane': {
@@ -1134,18 +1157,14 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        const s = this._resolveCategory('pole', item.style);
+        const s = this._resolveCategory('pole', item.style), m = markerAttrs(s, sx, sy), tag = m.d ? 'path' : 'circle';
+        if (item._el && item._el.tagName !== tag) { item._el.remove(); item._el = null; }   // the symbol changed shape
         if (!item._el) {
-          item._el = document.createElementNS(SVG_NS, 'circle');
+          item._el = document.createElementNS(SVG_NS, tag);
           setAttrs(item._el, { class: this._classFor('pole', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
-        setAttrs(item._el, {
-          cx: sx, cy: sy,
-          r: s.r,
-          fill: s.fill,
-          stroke: s.stroke,
-        });
+        setAttrs(item._el, m.d ? { d: m.d, ...m.attrs } : { cx: sx, cy: sy, r: s.r, ...m.attrs });
         break;
       }
       case 'line': {
@@ -1153,18 +1172,14 @@ export class Stereonet {
         const d = this._rotate(dcos);
         const [px, py] = this._projectFn(d);
         const [sx, sy] = this._toSvg(px, py);
-        const s = this._resolveCategory('line', item.style);
+        const s = this._resolveCategory('line', item.style), m = markerAttrs(s, sx, sy), tag = m.d ? 'path' : 'circle';
+        if (item._el && item._el.tagName !== tag) { item._el.remove(); item._el = null; }   // the symbol changed shape
         if (!item._el) {
-          item._el = document.createElementNS(SVG_NS, 'circle');
+          item._el = document.createElementNS(SVG_NS, tag);
           setAttrs(item._el, { class: this._classFor('line', item.style.class) });
           this._dataGroup.appendChild(item._el);
         }
-        setAttrs(item._el, {
-          cx: sx, cy: sy,
-          r: s.r,
-          fill: s.fill,
-          stroke: s.stroke,
-        });
+        setAttrs(item._el, m.d ? { d: m.d, ...m.attrs } : { cx: sx, cy: sy, r: s.r, ...m.attrs });
         break;
       }
       case 'plane': {

@@ -143,6 +143,10 @@ const grid = densityGrid(dcos, { projection: 'equal-area', gridSize: 48 });
 const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
 ```
 
+**Point markers.** A pole's or a line's style takes `symbol` (`circle`, `square`, `triangle`, `diamond`,
+`cross`, `x`; the last two are strokes in the fill colour), `opacity` and `strokeWidth`, drawn the same in
+the SVG, the live DOM and on a canvas: `net.pole(45, 30, { symbol: 'triangle', fill: '#c00', r: 4 })`.
+
 **Rotating a contoured net.** The raster lives in projected space, so a rotated view (or the other
 projection, or another grid size) used to mean counting every measurement against every cell again.
 `densityField()` computes the density once on the sphere (rings of nodes about 1.2° apart over the lower
