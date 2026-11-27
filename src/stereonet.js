@@ -109,7 +109,7 @@ export class Stereonet {
     this.padding = options.padding ?? defaults.padding;
     this.projection = options.projection || 'equal-area';
     this.net = options.net || 'equatorial';
-    this.gridSpacing = options.gridSpacing || 10;   // net great/small-circle spacing in degrees
+    this.gridSpacing = options.gridSpacing === 0 ? 0 : (options.gridSpacing || 10);   // net great/small-circle spacing in degrees; 0 = none
     this.hemisphere = options.hemisphere || 'lower'; // 'lower' | 'upper'
     this.rotation = options.rotation ?? (options.center
       ? Stereonet.rotationFromCenter(options.center[0], options.center[1])
@@ -544,6 +544,10 @@ export class Stereonet {
    * @param {number} [options.max] - density value mapped to t=1 (default: grid maximum)
    * @param {number} [options.threshold=0.04] - skip cells whose normalised density is below this
    * @param {number} [options.opacity] - per-cell fill-opacity
+   * @param {number[]} [options.levels] - BANDED (filled contours): a cell takes colors[k] when its density is at or
+   *   above levels[k] (and below levels[k+1]); below levels[0] it is left empty. Same units as the contour lines
+   *   (Kamb σ, or MUD), so the fill and the lines agree.
+   * @param {string[]} [options.colors] - one colour per level (with levels)
    * @returns {this}
    */
   heatmap(dcos, options = {}) {
@@ -607,12 +611,21 @@ export class Stereonet {
       for (let i = 0; i < gridSize; i++) {
         const v = grid[j * gridSize + i];
         if (Number.isNaN(v)) continue;
-        const t = v / max;
-        if (t < threshold) continue;
+        let fill;
+        if (opts.levels && opts.colors) {               // banded: the band v falls in
+          let k = -1;
+          for (let b = 0; b < opts.levels.length; b++) if (v >= opts.levels[b]) k = b;
+          if (k < 0) continue;
+          fill = opts.colors[Math.min(k, opts.colors.length - 1)];
+        } else {
+          const t = v / max;
+          if (t < threshold) continue;
+          fill = color(t);
+        }
         const px = -projR + i * step;
         const x = center + px * scale;
         const y = center - py * scale;
-        cb(x - cell / 2, y - cell / 2, cell, color(t));
+        cb(x - cell / 2, y - cell / 2, cell, fill);
       }
     }
   }

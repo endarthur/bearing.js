@@ -80,6 +80,13 @@ export function densityGrid(dcos, options = {}) {
   const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
   // Pre-rotate data into the view frame
   const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
+  // options.weights: one per measurement (a Terzaghi correction, a length) — scaled so they sum to n, so the
+  // expected count, the standard deviation and the MUD keep their meaning; absent, every weight is 1
+  let wt = null;
+  if (options.weights && options.weights.length === n) {
+    let s = 0; for (const w of options.weights) s += (w > 0 && Number.isFinite(w)) ? w : 0;
+    if (s > 0) wt = options.weights.map(w => ((w > 0 && Number.isFinite(w)) ? w : 0) * n / s);
+  }
 
   if (method === 'kamb') {
     // Kamb (1959) counting in standard-deviation units.
@@ -101,7 +108,7 @@ export function densityGrid(dcos, options = {}) {
         for (let m = 0; m < n; m++) {
           const rd = data[m];
           // axial: a measurement and its antipode are equivalent
-          if (Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]) >= cosTheta) count++;
+          if (Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]) >= cosTheta) count += wt ? wt[m] : 1;
         }
         grid[j * gridSize + i] = (count - E) / sd;
       }
@@ -133,7 +140,7 @@ export function densityGrid(dcos, options = {}) {
         // axial, like Kamb: a measurement and its antipode are the same (data pre-rotated into the view
         // can sit in the upper hemisphere; a subvertical set straddles the primitive)
         const dot = Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]);
-        density += Math.exp(kappa * (dot - 1));
+        density += (wt ? wt[m] : 1) * Math.exp(kappa * (dot - 1));
       }
 
       // MUD normalisation:  MUD ≈ κ/n · Σ exp(κ(cosθ − 1))

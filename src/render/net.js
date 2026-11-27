@@ -13,6 +13,7 @@ import * as curves from '../core/curves.js';
  * @returns {{ greatCircles: Array<Array<[number,number,number]>>, smallCircles: Array<Array<[number,number,number]>> }}
  */
 export function generateNet(interval = 10, type = 'equatorial') {
+  if (!(interval > 0)) return { greatCircles: [], smallCircles: [] };   // 0: no graticule (a clean net for print)
   return type === 'polar'
     ? generatePolarNet(interval)
     : generateEquatorialNet(interval);
