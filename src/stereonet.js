@@ -628,7 +628,9 @@ export class Stereonet {
         const px = -projR + i * step;
         const x = center + px * scale;
         const y = center - py * scale;
-        cb(x - cell / 2, y - cell / 2, cell, fill);
+        // a hair larger than the grid step: abutting cells leave no anti-aliased seam (in a PDF or an SVG, every cell
+        // is its own rectangle)
+        cb(x - cell * 0.52, y - cell * 0.52, cell * 1.04, fill);
       }
     }
   }
