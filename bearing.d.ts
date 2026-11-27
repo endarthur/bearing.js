@@ -31,12 +31,19 @@ export interface StereonetOptions {
 export interface ProjectResult { x: number; y: number; upper: boolean; }
 export interface Layout { center: number; radius: number; scale: number; projR: number; }
 
+/** 'fisher' (MUD), 'kamb' (σ), 'percent' (the Schmidt counting circle: % per 1 % area), 'cosine' (Σ|cos|ᵏ, MUD) */
+export type DensityMethod = 'fisher' | 'kamb' | 'percent' | 'cosine';
+
 export interface ContourOptions {
   levels?: number[];
   sigma?: number;
   gridSize?: number;
-  method?: 'fisher' | 'kamb';
+  method?: DensityMethod;
   kambSigma?: number;
+  /** 'percent': the counting circle's area, % of the hemisphere (default 1) */
+  areaPercent?: number;
+  /** 'cosine': the power k of Σ|cos|ᵏ (default ≈ the Fisher default's κ) */
+  cosinePower?: number;
   /** per-measurement weights (scaled to sum to n) */
   weights?: number[];
   /** read the density from a field on the sphere: a DensityField, true (the remembered one), false (count
@@ -52,7 +59,7 @@ export interface ContourOptions {
 export interface HeatmapOptions {
   gridSize?: number;
   sigma?: number;
-  method?: 'fisher' | 'kamb';
+  method?: DensityMethod;
   kambSigma?: number;
   color?: (t: number) => string;
   max?: number;
@@ -330,6 +337,21 @@ export namespace fault {
   function michael(planes: Dcos[], slips: Dcos[]): { stress: Mat3; residual: number };
   function principalStresses(stress: Mat3): { axes: Dcos[]; values: number[] };
   function dihedraGrid(planes: Dcos[], slips: Dcos[], options?: { projection?: Projection; gridSize?: number }): DensityGrid;
+  /** Angelier & Mechler (1977): % of faults putting each direction in their P dihedron */
+  function dihedraCountGrid(planes: Dcos[], slips: Dcos[], options?: { projection?: Projection; gridSize?: number }): DensityGrid;
+  /** σn − (n·σn)n on the upward normal (tension positive) */
+  function shearTraction(stress: Mat3, normal: Dcos): Vec3;
+  /** per-fault angle (degrees) between the slip and the resolved shear, and their mean */
+  function slipMisfit(stress: Mat3, planes: Dcos[], slips: Dcos[]): { angles: number[]; mean: number };
+  /** φ = (σ2 − σ3)/(σ1 − σ3) */
+  function stressRatio(stress: Mat3): number;
+  /** the B-axis linear inversion (Fry 1999): deviatoric, unit norm, tension positive */
+  function fryInversion(planes: Dcos[], slips: Dcos[]): { stress: Mat3; eigenvalues: number[]; misfit: number };
+  /** resampled inversions: 95 % cones about σ1 and σ3, φ's 95 % interval */
+  function bootstrapStress(planes: Dcos[], slips: Dcos[], options?: { method?: 'michael' | 'fry'; n?: number; seed?: number }): {
+    stress: Mat3; sigma1: { axis: Dcos; cone95: number }; sigma3: { axis: Dcos; cone95: number };
+    phi: { value: number; lo: number; hi: number }; n: number;
+  };
 }
 
 export interface DeviceOrientationOptions { declination?: number; }
@@ -392,11 +414,11 @@ export interface DensityGrid {
   field?: boolean;
 }
 export interface DensityField {
-  method: 'fisher' | 'kamb'; n: number; step: number; values: Float64Array;
+  method: DensityMethod; n: number; step: number; values: Float64Array;
   /** the density at a unit direction (interpolated; axial — the upper hemisphere reads its antipode) */
   at(d: Vec3): number;
 }
-export interface DensityFieldOptions { method?: 'fisher' | 'kamb'; sigma?: number; kambSigma?: number; weights?: number[]; step?: number }
+export interface DensityFieldOptions { method?: DensityMethod; sigma?: number; kambSigma?: number; areaPercent?: number; cosinePower?: number; weights?: number[]; step?: number }
 export function densityField(dcos: Dcos[], options?: DensityFieldOptions): DensityField;
 export function cachedDensityField(dcos: Dcos[], options?: DensityFieldOptions): DensityField;
 export const densityFieldCache: { readonly stats: { size: number; hits: number; misses: number }; clear(): void };

@@ -8,7 +8,7 @@
 import * as mat3 from './core/mat3.js';
 import { inverse as equalAreaInverse } from './projections/equal-area.js';
 import { inverse as equalAngleInverse } from './projections/equal-angle.js';
-import { cachedDensityField } from './densityfield.js';
+import { cachedDensityField, kernelOf, scaledWeights } from './densityfield.js';
 
 const DEG = Math.PI / 180;
 
@@ -90,7 +90,7 @@ export function densityGrid(dcos, options = {}) {
   // ── the field: the density on the sphere, read at each view node turned back into the data's frame ──
   const want = options.field ?? 'auto';
   const field = typeof want === 'object' && want ? want
-    : (want === true || (want === 'auto' && n * gridSize * gridSize > 4e6)) ? cachedDensityField(dcos, { method, sigma: options.sigma, kambSigma: options.kambSigma, weights: options.weights, step: options.fieldStep }) : null;
+    : (want === true || (want === 'auto' && n * gridSize * gridSize > 4e6)) ? cachedDensityField(dcos, { method, sigma: options.sigma, kambSigma: options.kambSigma, areaPercent: options.areaPercent, cosinePower: options.cosinePower, weights: options.weights, step: options.fieldStep }) : null;
   if (field) {
     const Rt = rotation ? mat3.transpose(rotation) : null;   // view = R·data, so the data's frame = Rᵀ·view
     for (let j = 0; j < gridSize; j++) {
@@ -110,72 +110,30 @@ export function densityGrid(dcos, options = {}) {
   const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
   // options.weights: one per measurement (a Terzaghi correction, a length) — scaled so they sum to n, so the
   // expected count, the standard deviation and the MUD keep their meaning; absent, every weight is 1
-  let wt = null;
-  if (options.weights && options.weights.length === n) {
-    let s = 0; for (const w of options.weights) s += (w > 0 && Number.isFinite(w)) ? w : 0;
-    if (s > 0) wt = options.weights.map(w => ((w > 0 && Number.isFinite(w)) ? w : 0) * n / s);
-  }
+  const wt = scaledWeights(options.weights, n);
 
-  if (method === 'kamb') {
-    // Kamb (1959) counting in standard-deviation units.
-    const k = options.kambSigma != null ? options.kambSigma : 3;
-    const cosTheta = n / (n + k * k);               // counting-cone cosine
-    const A = 1 - cosTheta;                          // axial cap area fraction
-    const E = n * A;                                 // expected count (uniform)
-    const sd = Math.sqrt(n * A * (1 - A)) || 1;      // std dev of the count
-
-    for (let j = 0; j < gridSize; j++) {
-      const py = projR - j * step;
-      for (let i = 0; i < gridSize; i++) {
-        const px = -projR + i * step;
-        if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) { grid[j * gridSize + i] = NaN; continue; }
-        const d = rimInverse(inverseFn, px, py, projR);
-        if (!d) { grid[j * gridSize + i] = NaN; continue; }
-
-        let count = 0;
-        for (let m = 0; m < n; m++) {
-          const rd = data[m];
-          // axial: a measurement and its antipode are equivalent
-          if (Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]) >= cosTheta) count += wt ? wt[m] : 1;
-        }
-        grid[j * gridSize + i] = (count - E) / sd;
-      }
-    }
-    return { grid, gridSize, step, projR, projection, method };
-  }
-
-  // Fisher kernel — kernel width default ≈ 90/√n degrees.
-  const sigma = (options.sigma != null ? options.sigma : 90 / Math.sqrt(n)) * DEG;
-  const cosSigma = Math.cos(sigma);
-  const kappa = 1 / (1 - cosSigma);
-
+  // the direct count: every measurement against every cell, with the method's own kernel (densityfield.js
+  // kernelOf — one definition for this and the field). A counting cone cuts exactly; a smooth kernel sums all.
+  const K = kernelOf(n, options);
   for (let j = 0; j < gridSize; j++) {
     const py = projR - j * step;
     for (let i = 0; i < gridSize; i++) {
       const px = -projR + i * step;
-
-      if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) {
-        grid[j * gridSize + i] = NaN;
-        continue;
-      }
-
+      if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) { grid[j * gridSize + i] = NaN; continue; }
       const d = rimInverse(inverseFn, px, py, projR);
       if (!d) { grid[j * gridSize + i] = NaN; continue; }
-
-      let density = 0;
+      let acc = 0;
       for (let m = 0; m < n; m++) {
         const rd = data[m];
-        // axial, like Kamb: a measurement and its antipode are the same (data pre-rotated into the view
-        // can sit in the upper hemisphere; a subvertical set straddles the primitive)
+        // axial: a measurement and its antipode are the same (data pre-rotated into the view can sit in the
+        // upper hemisphere; a subvertical set straddles the primitive)
         const dot = Math.abs(d[0] * rd[0] + d[1] * rd[1] + d[2] * rd[2]);
-        density += (wt ? wt[m] : 1) * Math.exp(kappa * (dot - 1));
+        if (K.cone && dot < K.cosCut) continue;
+        acc += (wt ? wt[m] : 1) * K.term(dot);
       }
-
-      // MUD normalisation:  MUD ≈ κ/n · Σ exp(κ(cosθ − 1))
-      grid[j * gridSize + i] = kappa * density / n;
+      grid[j * gridSize + i] = K.value(acc);
     }
   }
-
   return { grid, gridSize, step, projR, projection, method };
 }
 

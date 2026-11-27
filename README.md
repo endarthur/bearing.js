@@ -19,7 +19,7 @@ Structural geology stereonet library in pure JavaScript. No dependencies.
 - Bootstrap confidence regions (non-parametric cone for the mean, ellipse for eigenvectors)
 - Structural analysis: π/fold-axis (best-fit great circle), best-fit plane, unfolding/tilt test
 - Mobile compass math: device orientation → dip-direction/dip and trend/plunge
-- Fault-slip & paleostress: kinematic P/T axes, right-dihedra field, Michael (1984) stress inversion
+- Fault-slip & paleostress: kinematic P/T axes, right dihedra (the continuous field, and Angelier & Mechler's 1977 count), the Michael (1984) and B-axis (Fry 1999) stress inversions, their misfit, φ, and bootstrap confidence on σ1, σ3 and φ
 - Set identification: axial k-means + soft Watson-mixture EM (BIC chooses the number of sets)
 - Fabric diagrams: Woodcock K–C, Vollmer P–G–R ternary
 - Synthetic sampling: Fisher draws, smoothed bootstrap, uniform + concentrated rotation sampling
@@ -77,7 +77,7 @@ npm run build
 | `circular` | Circular (azimuthal) statistics: mean, R, von Mises κ, Rayleigh test |
 | `rose` | Rose-diagram binning (`roseBins`), petal geometry (`rosePetals`), SVG (`roseSVG`) |
 | `analysis` | Fold axis / best-fit great circle, best-fit plane, dataset rotation & unfolding |
-| `fault` | Fault-slip kinematics: P/T axes, Angelier dihedra, Michael (1984) paleostress inversion |
+| `fault` | Fault-slip kinematics: P/T axes, right dihedra (field + count), Michael (1984) and Fry (1999) inversions, `slipMisfit`, `stressRatio`, `bootstrapStress` |
 | `cluster` | Orientation-set identification: k-means + Watson-mixture EM with BIC model selection |
 | `fabricplot` | Fabric diagnostic diagrams: Woodcock K–C plot, Vollmer P–G–R ternary |
 | `simulate` | Fisher sampling + Fisher-kernel smoothed bootstrap (synthetic fabrics) |
@@ -173,6 +173,12 @@ densityGrid(dcos, { field: f, rotation: R });       // any view, from the one fi
   normal `N 2 −`, reverse `I R 1 +`, dextral `D 3`, sinistral `S L 4`, unknown `U F 0 5 ?` (and
   anything unrecognised → `defined: false`); words too (`normal`, `reverse`, `thrust`,
   `right-lateral`, `left-lateral`…). Dextral/sinistral are resolved against the right-hand-rule strike.
+- **Stress** is tension-positive (compression negative), and a fault slips along the shear traction its
+  plane carries on the upward normal, τ = σn − (n·σn)n (Wallace–Bott). Every inversion returns a tensor in
+  that convention. Michael (1984) assumes every fault carries the same shear magnitude, which biases it by
+  a degree or two when they don't; the B-axis inversion (Fry 1999) assumes nothing of the magnitudes.
+- **Density methods:** `fisher` (default, MUD), `kamb` (σ), `percent` (the Schmidt counting circle, % of
+  the data per 1 % of the area; `areaPercent`, default 1) and `cosine` (Σ|cos θ|ᵏ in MUD; `cosinePower`).
 
 ## Tests
 

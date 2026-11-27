@@ -23,17 +23,39 @@
 const DEG = Math.PI / 180;
 const TINY = 20.7;                                   // exp(-20.7) ≈ 1e-9: where the Fisher kernel is truncated
 
-/** the kernel's parameters for n measurements — shared with densityGrid's direct count */
+/**
+ * A density method for n measurements — ONE definition shared by densityGrid's direct count and the field:
+ *   cosCut   the |cos| below which a measurement adds nothing (a counting cone), or adds less than 1e-9 of
+ *            the peak (a kernel — the field truncates there; the direct sum doesn't)
+ *   cone     true for a counting cone (the cut is exact), false for a smooth kernel
+ *   term(c)  what one measurement at |cos| = c adds (times its weight)
+ *   value(s) the cell's value from the weighted sum s
+ *
+ *   'fisher'  (default) exponential kernel, MUD: κ/n·Σ exp(κ(c − 1)), κ from options.sigma (degrees, 90/√n)
+ *   'kamb'    Kamb (1959): the count in a cone cosθ = n/(n+k²), as (count − E)/σ; k = options.kambSigma (3)
+ *   'percent' the Schmidt counting circle: the count in a cone covering options.areaPercent of the hemisphere
+ *             (1 %), as per cent of the data per 1 % of area
+ *   'cosine'  a cosine-power kernel, MUD: (k+1)/n·Σ cᵏ, k = options.cosinePower (default κ of the Fisher
+ *             default, so the two are about as smooth)
+ */
 export function kernelOf(n, options = {}) {
   const method = options.method || 'fisher';
   if (method === 'kamb') {
     const k = options.kambSigma != null ? options.kambSigma : 3;
-    const cosTheta = n / (n + k * k), A = 1 - cosTheta;
-    return { method, cosCut: cosTheta, E: n * A, sd: Math.sqrt(n * A * (1 - A)) || 1 };
+    const cosTheta = n / (n + k * k), A = 1 - cosTheta, E = n * A, sd = Math.sqrt(n * A * (1 - A)) || 1;
+    return { method, cone: true, cosCut: cosTheta, term: () => 1, value: (s) => (s - E) / sd, E, sd };
+  }
+  if (method === 'percent') {
+    const p = options.areaPercent > 0 && options.areaPercent < 100 ? options.areaPercent : 1;
+    return { method, cone: true, cosCut: 1 - p / 100, term: () => 1, value: (s) => (100 * s / n) / p };
+  }
+  if (method === 'cosine') {
+    const k = options.cosinePower > 0 ? options.cosinePower : 1 / (1 - Math.cos((90 / Math.sqrt(n)) * DEG));
+    return { method, cone: false, cosCut: Math.exp(-TINY / k), term: (c) => Math.pow(c, k), value: (s) => ((k + 1) * s) / n };
   }
   const sigma = (options.sigma != null ? options.sigma : 90 / Math.sqrt(n)) * DEG;
   const kappa = 1 / (1 - Math.cos(sigma));
-  return { method, kappa, cosCut: Math.max(-1, 1 - TINY / kappa) };
+  return { method: 'fisher', cone: false, kappa, cosCut: Math.max(-1, 1 - TINY / kappa), term: (c) => Math.exp(kappa * (c - 1)), value: (s) => (kappa * s) / n };
 }
 
 /** weights scaled to sum to n (so E, σ and the MUD keep their meaning), or null */
@@ -102,12 +124,12 @@ export function densityField(dcos, options = {}) {
               // a wider kernel (cosCut ≤ 0) would see both copies — the |dot| of the direct sum counts one
               if (K.cosCut <= 0 && dot < 0) continue;
               const w = wt ? wt[m] : 1;
-              acc += method === 'kamb' ? w : w * Math.exp(K.kappa * (dot - 1));
+              acc += w * K.term(dot);
             }
           }
         }
       }
-      values[rings.offsets[r] + k] = method === 'kamb' ? (acc - K.E) / K.sd : (K.kappa * acc) / n;
+      values[rings.offsets[r] + k] = K.value(acc);
     }
   }
   return makeField(method, n, stepDeg, rings, values);
@@ -145,7 +167,7 @@ function keyOf(dcos, options) {
   const mix = (v) => { const q = Math.round(v * 1e9) | 0; h ^= q; h = Math.imul(h, 0x01000193); h ^= q >>> 16; h = Math.imul(h, 0x01000193); };
   for (const d of dcos) { mix(d[0]); mix(d[1]); mix(d[2]); }
   if (options.weights) for (const w of options.weights) mix(+w || 0);
-  return `${options.method || 'fisher'}|${options.sigma ?? ''}|${options.kambSigma ?? ''}|${options.step || 1.2}|${dcos.length}|${options.weights ? options.weights.length : 0}|${h >>> 0}`;
+  return `${options.method || 'fisher'}|${options.sigma ?? ''}|${options.kambSigma ?? ''}|${options.areaPercent ?? ''}|${options.cosinePower ?? ''}|${options.step || 1.2}|${dcos.length}|${options.weights ? options.weights.length : 0}|${h >>> 0}`;
 }
 /** densityField, remembered: the same data and settings → the same field, without computing it again */
 export function cachedDensityField(dcos, options = {}) {
