@@ -611,6 +611,9 @@ export class Stereonet {
       for (let i = 0; i < gridSize; i++) {
         const v = grid[j * gridSize + i];
         if (Number.isNaN(v)) continue;
+        // the grid runs past the primitive (so contour LINES close at the rim); a filled cell outside it would
+        // spill over the net's edge
+        { const qx = -projR + i * step; if (qx * qx + py * py > projR * projR) continue; }
         let fill;
         if (opts.levels && opts.colors) {               // banded: the band v falls in
           let k = -1;
