@@ -178,12 +178,15 @@ describe('the primitive circle', () => {
       assert.equal(inv(R * 1.01, 0), null, 'clearly outside stays null');
     }
   });
-  it('the default 40-cell grid has no NaN ring: every cell within the 1.02 allowance is a number (contours close)', () => {
+  it('the default 40-cell grid has no NaN ring: every cell within the rim band (≥ 1.5 cells past the rim) is a number (contours close)', () => {
     const poles = [lineToDcos(90, 5), lineToDcos(270, 5), lineToDcos(0, 80)];
     for (const method of ['fisher', 'kamb']) {
       const g = densityGrid(poles, { method }), n = g.gridSize;
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
-        const px = -g.projR + i * g.step, py = g.projR - j * g.step, inside = px * px + py * py <= g.projR * g.projR * 1.02;
+        // the band runs at least a cell and a half past the rim (cells straddling it need all four corners, or a
+        // contour near the rim comes out dashed) — and never less than the 1.02 allowance
+        const band = Math.max(g.projR * g.projR * 1.02, (g.projR + 1.5 * g.step) ** 2);
+        const px = -g.projR + i * g.step, py = g.projR - j * g.step, inside = px * px + py * py <= band;
         assert.equal(Number.isFinite(g.grid[j * n + i]), inside, `${method} cell ${i},${j}`);
       }
     }

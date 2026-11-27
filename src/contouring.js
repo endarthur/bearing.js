@@ -93,7 +93,7 @@ export function densityGrid(dcos, options = {}) {
       const py = projR - j * step;
       for (let i = 0; i < gridSize; i++) {
         const px = -projR + i * step;
-        if (px * px + py * py > projR * projR * 1.02) { grid[j * gridSize + i] = NaN; continue; }
+        if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) { grid[j * gridSize + i] = NaN; continue; }
         const d = rimInverse(inverseFn, px, py, projR);
         if (!d) { grid[j * gridSize + i] = NaN; continue; }
 
@@ -119,7 +119,7 @@ export function densityGrid(dcos, options = {}) {
     for (let i = 0; i < gridSize; i++) {
       const px = -projR + i * step;
 
-      if (px * px + py * py > projR * projR * 1.02) {
+      if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) {
         grid[j * gridSize + i] = NaN;
         continue;
       }
