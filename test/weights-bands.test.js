@@ -32,8 +32,13 @@ test('a banded heatmap colours each cell by the band its density falls in, and l
   const fills = new Set(); let n = 0;
   sn._heatmapCells((x, y, s, f) => { fills.add(f); n++; });
   assert.ok(n > 0 && [...fills].every((f) => f === '#aaa' || f === '#333'), [...fills].join());
-  const { grid } = sn._heatmapData, above = [...grid].filter((v) => v >= 0.5).length;
-  assert.equal(n, above, 'one cell per grid value ≥ the first level');
+  const { grid, gridSize, step, projR } = sn._heatmapData;
+  let above = 0;
+  for (let j = 0; j < gridSize; j++) for (let i = 0; i < gridSize; i++) {
+    const v = grid[j * gridSize + i], x = -projR + i * step, y = projR - j * step;
+    if (!Number.isNaN(v) && v >= 0.5 && x * x + y * y <= projR * projR) above++;
+  }
+  assert.equal(n, above, 'one cell per grid value ≥ the first level, inside the net');
 });
 
 test('a graticule spacing of 0 draws no graticule', () => {
