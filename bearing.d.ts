@@ -37,6 +37,13 @@ export interface ContourOptions {
   gridSize?: number;
   method?: 'fisher' | 'kamb';
   kambSigma?: number;
+  /** per-measurement weights (scaled to sum to n) */
+  weights?: number[];
+  /** read the density from a field on the sphere: a DensityField, true (the remembered one), false (count
+   *  directly), or 'auto' (default: the field when n × gridSize² > 4·10⁶) */
+  field?: DensityField | boolean | 'auto';
+  /** the field's node spacing in degrees (default 1.2) */
+  fieldStep?: number;
   stroke?: string;
   strokeWidth?: number;
   colors?: string[];
@@ -381,7 +388,18 @@ export namespace color {
 
 export interface DensityGrid {
   grid: Float64Array; gridSize: number; step: number; projR: number; projection: string; method?: string;
+  /** true when the grid was read from a density field */
+  field?: boolean;
 }
+export interface DensityField {
+  method: 'fisher' | 'kamb'; n: number; step: number; values: Float64Array;
+  /** the density at a unit direction (interpolated; axial — the upper hemisphere reads its antipode) */
+  at(d: Vec3): number;
+}
+export interface DensityFieldOptions { method?: 'fisher' | 'kamb'; sigma?: number; kambSigma?: number; weights?: number[]; step?: number }
+export function densityField(dcos: Dcos[], options?: DensityFieldOptions): DensityField;
+export function cachedDensityField(dcos: Dcos[], options?: DensityFieldOptions): DensityField;
+export const densityFieldCache: { readonly stats: { size: number; hits: number; misses: number }; clear(): void };
 export function computeContours(dcos: Dcos[], options?: ContourOptions & { grid?: DensityGrid }): Array<{ level: number; paths: number[][][] }>;
 export function densityGrid(dcos: Dcos[], options?: ContourOptions): DensityGrid;
 

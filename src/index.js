@@ -24,6 +24,7 @@ export * as fabricplot from './fabricplot.js';
 export * as color from './color.js';
 export { symmetricEigen3 } from './core/eigen.js';
 export { computeContours, densityGrid } from './contouring.js';
+export { densityField, cachedDensityField, densityFieldCache } from './densityfield.js';
 
 export { SvgBuilder } from './render/svg.js';
 export { CanvasBuilder } from './render/canvas.js';

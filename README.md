@@ -91,6 +91,7 @@ npm run build
 | `curves` | Small circles, great circles as point sequences |
 | `computeContours` | Kernel-density contour lines |
 | `densityGrid` | Fisher-kernel density raster (MUD), reusable for heatmaps |
+| `densityField` | the density once on the sphere, read in any view (`cachedDensityField`, `densityFieldCache`) |
 | `SvgBuilder` | Low-level SVG path/element builder |
 
 ## Interactivity & overlays
@@ -140,6 +141,23 @@ import { densityGrid, computeContours } from './src/index.js';
 const grid = densityGrid(dcos, { projection: 'equal-area', gridSize: 48 });
 // grid → { grid: Float64Array, gridSize, step, projR, projection }; cells outside the net are NaN
 const contours = computeContours(dcos, { levels: [2, 4, 6], grid });
+```
+
+**Rotating a contoured net.** The raster lives in projected space, so a rotated view (or the other
+projection, or another grid size) used to mean counting every measurement against every cell again.
+`densityField()` computes the density once on the sphere (rings of nodes about 1.2° apart over the lower
+hemisphere; axial) and a view reads it by interpolation. `densityGrid` does this by itself when the direct
+count would be heavy (`field: 'auto'`, the default: n × gridSize² > 4·10⁶) and remembers the last eight
+fields by content, so a net dragged round reads the same field each frame; small datasets keep the exact
+per-cell count. At 50 000 measurements: Kamb 249 ms per 40² view directly → the field built once in 58 ms,
+then 3–4 ms a view; Fisher 952 ms → 38 ms once, 2–5 ms a view. The field equals the direct count at its
+nodes and stays within a few per cent of the peak between them (`test/densityfield.test.js`).
+
+```js
+import { densityField } from './src/index.js';
+const f = densityField(dcos, { method: 'kamb', kambSigma: 3 });
+f.at([0, 0, -1]);                                    // σ at the nadir
+densityGrid(dcos, { field: f, rotation: R });       // any view, from the one field
 ```
 
 ## Conventions

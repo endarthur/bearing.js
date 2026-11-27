@@ -8,6 +8,7 @@
 import * as mat3 from './core/mat3.js';
 import { inverse as equalAreaInverse } from './projections/equal-area.js';
 import { inverse as equalAngleInverse } from './projections/equal-angle.js';
+import { cachedDensityField } from './densityfield.js';
 
 const DEG = Math.PI / 180;
 
@@ -55,8 +56,15 @@ function rimInverse(inverseFn, px, py, projR) {
  *     the uniform expectation, (count − E)/σ with E = n·A, σ = √(n·A·(1−A)),
  *     A = 1 − cosθ. `options.kambSigma` sets k (default 3). Levels are σ.
  *
+ * A view needn't count every measurement against every node: `options.field` reads the density from a
+ * field on the sphere instead (densityfield.js) — computed once for the data and its settings and
+ * remembered, so a rotated net, the other projection, or another grid size reads the same field.
+ * `options.field`: a densityField to read; `true` to use the remembered one; `false` to count directly;
+ * `'auto'` (the default) reads the field when the direct count would be heavy (n × gridSize² > 4·10⁶) and
+ * counts directly otherwise — small data stays exact at every node.
+ *
  * @param {Array<number[]>} dcos - unit vectors (lower hemisphere)
- * @param {Object} options - projection/rotation/gridSize plus method/sigma/kambSigma
+ * @param {Object} options - projection/rotation/gridSize plus method/sigma/kambSigma/weights/field
  * @returns {{ grid: Float64Array, gridSize: number, step: number, projR: number, projection: string, method: string }}
  *   grid[j*gridSize+i] is the density value at projected (px = -projR + i*step, py = projR - j*step);
  *   cells outside the primitive circle are NaN.
@@ -78,6 +86,26 @@ export function densityGrid(dcos, options = {}) {
   if (n === 0) { grid.fill(NaN); return { grid, gridSize, step, projR, projection, method }; }
 
   const inverseFn = projection === 'equal-angle' ? equalAngleInverse : equalAreaInverse;
+
+  // ── the field: the density on the sphere, read at each view node turned back into the data's frame ──
+  const want = options.field ?? 'auto';
+  const field = typeof want === 'object' && want ? want
+    : (want === true || (want === 'auto' && n * gridSize * gridSize > 4e6)) ? cachedDensityField(dcos, { method, sigma: options.sigma, kambSigma: options.kambSigma, weights: options.weights, step: options.fieldStep }) : null;
+  if (field) {
+    const Rt = rotation ? mat3.transpose(rotation) : null;   // view = R·data, so the data's frame = Rᵀ·view
+    for (let j = 0; j < gridSize; j++) {
+      const py = projR - j * step;
+      for (let i = 0; i < gridSize; i++) {
+        const px = -projR + i * step;
+        if (px * px + py * py > Math.max(projR * projR * 1.02, (projR + 1.5 * step) ** 2)) { grid[j * gridSize + i] = NaN; continue; }
+        const d = rimInverse(inverseFn, px, py, projR);
+        if (!d) { grid[j * gridSize + i] = NaN; continue; }
+        grid[j * gridSize + i] = field.at(Rt ? mat3.transformVec3(Rt, d) : d);
+      }
+    }
+    return { grid, gridSize, step, projR, projection, method, field: true };
+  }
+
   // Pre-rotate data into the view frame
   const data = rotation ? dcos.map(d => mat3.transformVec3(rotation, d)) : dcos;
   // options.weights: one per measurement (a Terzaghi correction, a length) — scaled so they sum to n, so the
