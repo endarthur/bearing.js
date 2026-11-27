@@ -45,3 +45,13 @@ test('a graticule spacing of 0 draws no graticule', () => {
   const on = new Stereonet({ size: 200 }).svg(), off = new Stereonet({ size: 200, gridSpacing: 0 }).svg();
   assert.ok(off.length < on.length * 0.5, `${off.length} vs ${on.length}`);
 });
+
+test('a weighted rose sums weights per sector (both ends, when axial); no weights counts as before', async () => {
+  const { roseBins } = await import('../src/rose.js');
+  const az = [10, 12, 100];
+  const plain = roseBins(az, { binWidth: 10 }), w = roseBins(az, { binWidth: 10, weights: [2, 3, 10] });
+  assert.equal(plain.bins[1].count, 2); assert.equal(w.bins[1].count, 5); assert.equal(w.bins[10].count, 10); assert.equal(w.maxCount, 10);
+  const ax = roseBins(az, { binWidth: 10, axial: true, weights: [2, 3, 10] });
+  assert.equal(ax.bins[19].count, 5, 'the opposite end carries the same weight');
+  assert.equal(roseBins(az, { binWidth: 10, weights: [1, -4, NaN] }).n, 1, 'a weight that is not positive counts 0');
+});

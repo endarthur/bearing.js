@@ -39,16 +39,21 @@ export function roseBins(azimuths, options = {}) {
   const nBins = Math.round(360 / binWidth);
   const counts = new Array(nBins).fill(0);
 
-  const add = (az) => {
+  // options.weights: one per azimuth (a trace length, a thickness…) — a sector then sums weights, not counts;
+  // a weight that isn't a positive number counts 0
+  const W = Array.isArray(options.weights) && options.weights.length === azimuths.length ? options.weights : null;
+  const add = (az, w = 1) => {
     const a = ((az % 360) + 360) % 360;
     // Shift by half a bin so sectors are centred on multiples of binWidth.
     const idx = Math.floor((a + binWidth / 2) / binWidth) % nBins;
-    counts[idx]++;
+    counts[idx] += w;
   };
-  for (const az of azimuths) {
+  for (let i = 0; i < azimuths.length; i++) {
+    const az = azimuths[i];
     if (!Number.isFinite(az)) continue;
-    add(az);
-    if (axial) add(az + 180);
+    const w = W ? (Number.isFinite(+W[i]) && +W[i] > 0 ? +W[i] : 0) : 1;
+    add(az, w);
+    if (axial) add(az + 180, w);
   }
 
   let n = 0, maxCount = 0;
